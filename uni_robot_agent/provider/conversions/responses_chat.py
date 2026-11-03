@@ -74,7 +74,9 @@ def encode_request(
     if len(wire_names) != len(set(wire_names)):
         raise ValueError("Tool name collision after Chat protocol conversion")
     stream = bool(request.get("stream", False))
-    body = {"model": flat.get("model"), "messages": messages, "tools": tools, "stream": stream}
+    body = {"model": flat.get("model"), "messages": messages, "stream": stream}
+    if tools:
+        body["tools"] = tools
     for key in ("temperature", "top_p", "max_tokens", "parallel_tool_calls"):
         if key in flat:
             body[key] = flat[key]

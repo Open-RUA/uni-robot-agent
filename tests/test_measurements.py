@@ -110,6 +110,18 @@ def test_actual_usage_no_text_estimation(protocol, usage, expected):
     assert tuple(result[k] for k in ("generated_tokens", "think_tokens", "other_tokens")) == expected
 
 
+@pytest.mark.parametrize("has_tools", [False, True])
+def test_chat_gateway_omits_empty_tools_for_vllm(has_tools):
+    from uni_robot_agent.provider.registry import build_provider_adapter
+    request = {"model": "fixture", "input": "Fixture request"}
+    if has_tools:
+        request["tools"] = [{"type": "function", "name": "observe", "parameters": schema({})}]
+    body = build_provider_adapter("aliyun.chat_completions", client_protocol="responses").encode_request(request).body
+    assert ("tools" in body) is has_tools
+    if has_tools:
+        assert body["tools"][0]["function"]["name"] == "observe"
+
+
 @pytest.mark.parametrize("parallel", [False, True])
 def test_independent_bad_attempts_accumulate_but_queries_do_not_repenalize(parallel):
     bus = EventBus()
