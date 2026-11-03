@@ -7,12 +7,16 @@ from __future__ import annotations
 
 import threading
 import time
+import os
+from uuid import uuid4
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from uni_robot_agent.tools.toolkit import ImageAttachment
+
+_CLOCK_ID = uuid4().hex
 
 
 # Event types
@@ -22,12 +26,15 @@ class Event:
     timestamp_unix_s: float = field(default_factory=time.time)
     session_id: str = ""
     event_seq: int = 0
+    monotonic_s: float = field(default_factory=time.monotonic)
+    clock_id: str = field(default_factory=lambda: f"{_CLOCK_ID}:{os.getpid()}")
 
 
 @dataclass
 class SessionOpened(Event):
     integration: str = ""
     instruction: str = ""
+    unobserved_model_roles: tuple[str, ...] = ()
 
 
 @dataclass
@@ -133,6 +140,8 @@ class ToolResult(Event):
     images: tuple[ImageAttachment, ...] = field(default_factory=tuple, repr=False)
     tool_execution_seq: int = 0
     turn: int = 0
+    call_assessment: dict[str, Any] = field(default_factory=dict)
+    effect_assessment: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -167,6 +176,20 @@ class ModelRequest(Event):
     success: bool | None = None
 
 
+@dataclass
+class ProviderAttempt(Event):
+    """One upstream generation, including discarded retries; never an SDK token estimate."""
+
+    exchange_id: str = ""
+    attempt: int = 0
+    phase: str = ""
+    generated_tokens: int | None = None
+    think_tokens: int | None = None
+    other_tokens: int | None = None
+    http_status: int | None = None
+    usage_complete: bool = False
+
+
 # ─── EventBus ─────────────────────────────────────────────────────────────────
 
 class EventBus:
@@ -174,6 +197,7 @@ class EventBus:
 
     def __init__(self):
         self._lock = threading.Lock()
+        self.session_id = uuid4().hex
         self._handlers: list[Callable[[Event], None]] = []
         self._history: list[Event] = []
         self._next_seq = 1
@@ -190,6 +214,11 @@ class EventBus:
         with self._lock:
             # Gateway and SDK streams use different threads; assign sequence numbers centrally.
             event.event_seq = self._next_seq
+            event.session_id = event.session_id or self.session_id
+            # SDK wall timestamps may be backdated. Measurements use bus receipt
+            # times in this process only, never another process's monotonic clock.
+            event.monotonic_s = time.monotonic()
+            event.clock_id = f"{_CLOCK_ID}:{os.getpid()}"
             self._next_seq += 1
             self._history.append(event)
             handlers = list(self._handlers)

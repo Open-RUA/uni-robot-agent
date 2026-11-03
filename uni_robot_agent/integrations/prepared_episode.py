@@ -61,12 +61,22 @@ class Episode:
                 return ToolOutput(success=False, error=str(error), extra={
                     **(error.error.details if isinstance(self.description, DeviceEpisodeInfo) else {}),
                     "no_execution": status == "not_started", "execution_uncertain": status == "unknown",
-                    "execution_status": status})
+                    "execution_status": status}, call_error={
+                        "code": error.error.code, "fault_owner": (
+                            "infrastructure" if error.error.code in {
+                                "internal_error", "state_unavailable", "execution_unknown"} else "unknown"),
+                        "execution_status": status})
             if isinstance(error, (RequestRejected, ValidationError, ValueError)):
-                return ToolOutput(success=False, error=str(error), extra={"no_execution": True})
+                return ToolOutput(success=False, error=str(error), extra={"no_execution": True},
+                                  call_error={"code": getattr(error, "code", "unattributed_rejection"),
+                                              "fault_owner": getattr(error, "fault_owner", "unknown")})
+            from uni_robot_agent.services.errors import HttpCallError
+            import httpx
+            fault_owner = "infrastructure" if isinstance(error, (HttpCallError, httpx.TransportError)) else "unknown"
             logger.exception("Tool %s failed", handler.__name__)
             return ToolOutput(success=False, error="Tool execution failed",
-                              extra={"execution_uncertain": self.env.uncertain})
+                              extra={"execution_uncertain": self.env.uncertain},
+                              call_error={"code": type(error).__name__, "fault_owner": fault_owner})
 
     def publish(self, reply):
         self.state = reply.state_after

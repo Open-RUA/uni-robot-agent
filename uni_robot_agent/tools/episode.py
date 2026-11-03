@@ -31,6 +31,7 @@ class EpisodeTools(ToolProvider):
 
     def finish(self, status, summary):
         if status != "success" or not summary.strip():
-            raise RequestRejected("finish requires success and the observed completion evidence")
+            raise RequestRejected("finish requires success and the observed completion evidence",
+                                  code="finish_claim_arguments", fault_owner="policy")
         self.episode.finalize(reason="completion_claimed", status="success", summary=summary)
         return ToolOutput(extra={"submitted": True})

@@ -43,6 +43,7 @@ class ModelClient:
         retry_response_errors: bool = True,
         retryable_exceptions: tuple[type[Exception], ...] = (Exception,),
         tracer=None,
+        attempt_observer=None,
     ) -> None:
         if request_timeout_s <= 0 or max_retries < 0 or retry_backoff_initial_s < 0:
             raise ValueError("Invalid provider request timeout/retry budget")
@@ -63,6 +64,8 @@ class ModelClient:
         else:
             from uni_robot_agent.provider.protocols.responses import response_failure
         self._response_failure = response_failure
+        self._upstream_protocol = profile.upstream_protocol
+        self._attempt_observer = attempt_observer
         self.context_manager = context_manager or ContextManager(
             create_context_policy("identity")
         )
@@ -152,6 +155,7 @@ class ModelClient:
         attempts = exchange["provider_attempts"] if exchange is not None else []
         for attempt in range(self._max_retries + 1):
             started_at = time.monotonic()
+            self._observe_attempt(exchange, attempt + 1, "started")
             try:
                 options = {} if self._retry_http_errors else {"raise_http_errors": True}
                 status, response_headers, body = _send_provider_request(
@@ -162,6 +166,7 @@ class ModelClient:
                     **options,
                 )
             except Exception as exc:
+                self._observe_attempt(exchange, attempt + 1, "finished")
                 attempts.append(
                     {
                         "attempt": attempt + 1,
@@ -179,6 +184,7 @@ class ModelClient:
                     raise
                 self._wait_before_retry(attempt, "transport error")
                 continue
+            self._observe_attempt(exchange, attempt + 1, "finished", status=status, body=body)
             record = {
                 "attempt": attempt + 1,
                 "status": status,
@@ -216,6 +222,16 @@ class ModelClient:
                 attempt, failure["code"] if failure else f"HTTP {status}"
             )
         raise RuntimeError("provider retry loop ended unexpectedly")
+
+    def _observe_attempt(self, exchange, attempt, phase, *, status=None, body=b""):
+        if self._attempt_observer is None:
+            return
+        from uni_robot_agent.provider.usage import token_counts
+        try:
+            counts = token_counts(body, self._upstream_protocol) if phase == "finished" else {}
+            self._attempt_observer(exchange or {}, attempt, phase, status, counts)
+        except Exception:
+            logger.exception("Provider attempt recording failed")
 
     def close(self) -> None:
         try:

@@ -219,3 +219,8 @@ class ProtocolError(Contract):
 
 class RequestRejected(ValueError):
     """A request was rejected before its next native action."""
+
+    def __init__(self, message, *, code="request_rejected", fault_owner="unknown"):
+        super().__init__(message)
+        self.code = code
+        self.fault_owner = fault_owner

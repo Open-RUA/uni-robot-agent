@@ -64,6 +64,12 @@ class RunRecord:
                 if line.strip():
                     yield json.loads(line)
 
+    @property
+    def measurements(self) -> dict[str, Any] | None:
+        """Reward-independent facts; older runs may not have this artifact."""
+        path = self.session_dir / "measurements.json"
+        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+
     def artifact(self, relative_path: str) -> Path:
         path = (self.session_dir / relative_path).resolve()
         if not path.is_relative_to(self.session_dir):

@@ -102,14 +102,11 @@ class ParallelToolExecutor(ToolExecutor):
 
     def _call(self, name: str, arguments: dict[str, Any], *, background=False) -> ExecutionResult:
         if name in self._control_names:
-            if not self._tracer.enabled:
-                return self._controls.call(name, arguments)
-            with self._tracer.span("tool.control", tool=name):
-                return self._controls.call(name, arguments)
+            return self._control_call(name, arguments)
 
         # Reject hidden names before scheduling or notifying observation listeners.
         if name not in self._toolkit.get_tool_names():
-            return ExecutionResult.completed(ToolOutput(success=False, error=f"Unknown tool: {name}"))
+            return self._control_call(name, arguments, unknown=True)
 
         policy = self._policies.get(name, ToolExecutionPolicy())
         # Foreground overrides waiting only; resource ownership remains independent.
@@ -167,6 +164,37 @@ class ParallelToolExecutor(ToolExecutor):
             job.status,
             job.queue_position,
         )
+
+    def _control_call(self, name, arguments, *, unknown=False):
+        from uni_robot_agent.execution import execution_context
+        execution_id = uuid.uuid4().hex
+        self.emit_execution("queued", execution_id, name, arguments, "control")
+        output = None
+        with execution_context(execution_id):
+            self.emit_execution("started", execution_id, name, arguments, "control")
+            try:
+                if unknown:
+                    output = self._toolkit.execute_tool(name, arguments)
+                    return ExecutionResult.completed(output)
+                with self._tracer.span("tool.control", tool=name):
+                    result = self._controls.call(name, arguments)
+                output = result.output or ToolOutput(extra=result.to_dict())
+                assessment = None
+                # A query can return an original failed job. Its interface did
+                # succeed; the original execution retains its own assessment.
+                ids = ([arguments.get("job_id")] if name in {"get_tool_result", "wait_for_tool"}
+                       else arguments.get("job_ids") if name == "wait_for_tools" else None)
+                if (isinstance(ids, list) and ids and not output.call_error
+                        and all(isinstance(i, str) and self._registry.get(i) is not None for i in ids)):
+                    from uni_robot_agent.tools.assessment import VERSION
+                    assessment = {"version": VERSION, "status": "success", "fault_owner": "none",
+                                  "reason": "job_query_returned", "penalty_eligible": False}
+                self._toolkit.record_result(name, arguments, output, call_assessment=assessment)
+                return result
+            finally:
+                self.emit_execution("finished", execution_id, name, arguments, "control",
+                    success=output.success if output is not None else False,
+                    error=output.error if output is not None else "control_exception")
 
     def _execute(self, name: str, arguments: dict[str, Any]) -> ToolOutput:
         return self._toolkit.execute_tool(name, arguments)

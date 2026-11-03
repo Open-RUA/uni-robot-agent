@@ -207,8 +207,9 @@ def event_to_record(event: Event) -> dict[str, Any]:
         type(event), type(event).__name__,
     )
     # Omit empty fields to reduce record size.
-    return {
+    from uni_robot_agent.artifacts.measurements import redact
+    return redact({
         k: v
         for k, v in record.items()
         if v is not None and v != "" and v != {} and v != []
-    }
+    })

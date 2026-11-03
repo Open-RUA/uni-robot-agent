@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from uni_robot_agent.artifacts.run import build_run_result, write_result_json
 from uni_robot_agent.artifacts.records import RunResult
+from uni_robot_agent.artifacts.measurements import RunMeasurements
 from uni_robot_agent.tools.client import ToolClient
 from uni_robot_agent.config import SessionConfig
 from uni_robot_agent.events import SessionOpened, SessionClosed
@@ -267,6 +268,7 @@ class Session:
         self._started = time.time()
         self._deadline = None
         self._tools = None
+        self._measurements = None
         self.result: RunResult | None = None
         self.events = EventBus()
         self._subscriptions = EventSubscriptions(self.events)
@@ -302,6 +304,11 @@ class Session:
             return self
         args = self._args
         self._started = time.time()
+        from uni_robot_agent.config import public_config
+        if not getattr(args, "_session_dir", None):
+            args._session_dir = str(Path(args.output_dir or "outputs") /
+                f"{args.integration}_{args.agent_backend or 'tools'}_{int(time.time())}_{uuid4().hex[:8]}")
+        self._measurements = RunMeasurements(args._session_dir, public_config(args))
         timeout_s = args.episode_timeout_s or None
         if deadline := getattr(args, "_episode_deadline", None):
             timeout_s = max(0.001, deadline - time.time())
@@ -316,18 +323,22 @@ class Session:
             if self._console:
                 self._subscriptions.add(ConsoleSubscriber())
             self._subscriptions.add(EventJsonlSubscriber(assembly.session_dir, artifacts=assembly.artifacts))
+            self._subscriptions.add(self._measurements)
             assembly.toolkit.set_event_bus(self.events)
             connect_execution_events(assembly.executor, self.events)
             self._tools = ToolClient(assembly.executor, self._require_active)
             if args.instruction is None:
                 args.instruction = assembly.integration_session.episode.instruction
-            self.events.emit(SessionOpened(integration=args.integration, instruction=args.instruction))
+            self.events.emit(SessionOpened(integration=args.integration, instruction=args.instruction,
+                unobserved_model_roles=("actor_reviewer",) if getattr(args, "vla_review", False) else ()))
             return self
         except BaseException as error:
             if self._assembly is not None:
                 self.finish(error=f"Session startup failed: {error}")
             else:
                 self._closed = True
+                self._measurements.finish({"error": f"Session startup failed: {type(error).__name__}",
+                                           "task_success": None, "accepted": False})
                 close_resource(self._agent)
                 close_resource(self._subscriptions)
             raise
@@ -396,7 +407,8 @@ class Session:
         assembly = self._assembly
         try:
             self.result = _finalize_run(assembly, self._subscriptions, self._args,
-                self._agent_result, error, self._started, bus=self.events)
+                self._agent_result, error, self._started, bus=self.events,
+                measurements=self._measurements)
             return self.result
         finally:
             for resource in (self._agent, assembly.integration_session, assembly.telemetry):
@@ -494,7 +506,7 @@ def _log_agent_result(result):
             (result.error or result.message)[:200],
         )
 
-def _finalize_run(assembly, subscriptions, args, result, error_msg, started, *, bus=None) -> RunResult:
+def _finalize_run(assembly, subscriptions, args, result, error_msg, started, *, bus=None, measurements=None) -> RunResult:
     """Drain physical work, seal the episode, then publish its result."""
     lifecycle_outcome: EpisodeOutcome | None = (
         EpisodeOutcome(
@@ -576,6 +588,12 @@ def _finalize_run(assembly, subscriptions, args, result, error_msg, started, *, 
             artifact_storage=artifact_storage,
         )
     try:
+        if measurements is not None:
+            try:
+                measurements.finish(record)
+                record["measurements_path"] = "measurements.json"
+            except Exception as exc:
+                record.setdefault("storage_errors", {})["measurements"] = type(exc).__name__
         record = write_result_json(assembly.session_dir, record)
     except Exception as e:  # noqa: BLE001 - result-write failure must not bypass resource cleanup.
         finally_error = e

@@ -109,14 +109,16 @@ def locate(episode, *, perception, method, snapshot_id, camera=None, prompt=None
     depth_enabled = cameras[camera].has_depth and cameras[camera].has_calibration
     if method == "segment":
         if points is not None or bool(prompt and prompt.strip()) == (point is not None):
-            raise RequestRejected("segment requires exactly one nonempty prompt or point, and no points")
+            raise RequestRejected("segment requires exactly one nonempty prompt or point, and no points",
+                                  code="segment_argument_combination", fault_owner="policy")
         if perception is None:
             raise RequestRejected("Segmentation requires a configured SAM service")
     elif method == "pixels":
         if not depth_enabled:
             raise RequestRejected("pixels is unavailable for this camera")
         if prompt is not None or point is not None or points is None:
-            raise RequestRejected("pixels requires points only")
+            raise RequestRejected("pixels requires points only",
+                                  code="pixels_argument_combination", fault_owner="policy")
     else:
         raise RequestRejected("method must be segment, pixels or triangulate")
     manifest = episode.env.snapshot(snapshot_id)

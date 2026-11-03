@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Persist reward-independent rollout measurements and pre-start manifests for
+  CLI/Python sessions, including explicit missing-data reasons and offline replay.
+- Record upstream generation attempts, separate tool interface responsibility
+  from direct effects, and preserve background query identity without repeating
+  the original action's failure. See [measurement contracts](docs/measurements.md).
+
 ## 0.1.0 — 2026-11-03
 
 Initial open-source release of uni-robot-agent, a robot agent built on Codex and

@@ -47,6 +47,8 @@ class ToolOutput:
     obs: dict[str, Any] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
     images: list[ImageAttachment] = field(default_factory=list)
+    # Internal diagnostics stay outside the model-facing payload.
+    call_error: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self, *, for_model: bool = False) -> dict[str, Any]:
         """Keep internal call status; name its meaning explicitly on the model wire."""
@@ -116,8 +118,6 @@ class Toolkit:
     def execute_tool(self, name: str, input_dict: dict[str, Any]) -> ToolOutput:
         """Execute a tool, return its structured result, and emit ToolResult."""
         tool_def = self._tools.get(name)
-        if tool_def is None:
-            return ToolOutput(success=False, error=f"Unknown tool: {name}")
 
         # Handlers may run concurrently; allocate execution sequence numbers under a separate lock.
         with self._sequence_lock:
@@ -126,7 +126,9 @@ class Toolkit:
 
         # Emit ToolResult even when a handler raises so the failure is recorded.
         try:
-            result = tool_def.handler(**input_dict)
+            result = (tool_def.handler(**input_dict) if tool_def is not None else
+                      ToolOutput(success=False, error=f"Unknown tool: {name}",
+                                 call_error={"code": "unknown_tool", "fault_owner": "policy"}))
         except Exception as e:
             import traceback
 
@@ -144,26 +146,25 @@ class Toolkit:
                     f"expected ToolOutput"
                 )
 
-        result_dict = result.to_dict()
+        self.record_result(name, input_dict, result, sequence=tool_execution_seq)
 
-        if self._event_bus:
+        return result
+
+    def record_result(self, name, arguments, result, *, sequence=0, call_assessment=None):
+        """Publish the same result contract for robot and runtime-control tools."""
+        if self._event_bus is not None:
             from uni_robot_agent.events import ToolResult as ToolResultEvent
             from uni_robot_agent.execution import current_execution_id
             from uni_robot_agent.execution.correlation import current_call
-
-            self._event_bus.emit(
-                ToolResultEvent(
-                    tool_name=name,
-                    arguments=input_dict,
-                    success=result_dict.get("success", True),
-                    output=result_dict,
-                    images=tuple(result.images),
-                    tool_execution_seq=tool_execution_seq,
-                    execution_id=current_execution_id() or "", **current_call(),
-                )
-            )
-
-        return result
+            from uni_robot_agent.tools.assessment import assess_call, assess_effect
+            output = result.to_dict()
+            self._event_bus.emit(ToolResultEvent(
+                tool_name=name, arguments=arguments, success=result.success,
+                output=output, images=tuple(result.images), tool_execution_seq=sequence,
+                execution_id=current_execution_id() or "", **current_call(),
+                call_assessment=call_assessment or assess_call({**output, "call_error": result.call_error}),
+                effect_assessment=assess_effect(name, output, image_count=len(result.images)),
+            ))
 
     def get_tool_names(self) -> list[str]:
         return list(self._tools.keys())
@@ -230,6 +231,7 @@ def bind_tools(specs, *, provider_id, handlers, invoke=None):
             except jsonschema.ValidationError as error:
                 field = ".".join(map(str, error.absolute_path)) or "arguments"
                 return ToolOutput(success=False, error=f"{field}: {error.message}",
+                                  call_error={"code": "schema_validation", "fault_owner": "policy"},
                                   extra={"no_execution": True, "validation": {
                                       "field": field, "constraint": error.validator,
                                       "allowed": error.validator_value, "received": error.instance}})

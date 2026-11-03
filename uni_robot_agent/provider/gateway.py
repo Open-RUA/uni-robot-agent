@@ -105,6 +105,7 @@ class ProviderGateway:
             max_retries=max_retries,
             retry_backoff_initial_s=retry_backoff_initial_s,
             tracer=tracer,
+            attempt_observer=self._attempt_event,
         )
         self._model_parallel_tool_calls = model_parallel_tool_calls
         self._model_binding = model_binding
@@ -327,6 +328,13 @@ class ProviderGateway:
                 success=(exchange.get("status") == 200 and not exchange.get("error")
                          and not exchange.get("response_error")) if phase == "finished" else None))
 
+    def _attempt_event(self, exchange, attempt, phase, status, counts):
+        if self._event_bus is not None:
+            from uni_robot_agent.events.core import ProviderAttempt
+            self._event_bus.emit(ProviderAttempt(
+                exchange_id=f"exchange_{exchange['index']:04d}", attempt=attempt,
+                phase=phase, http_status=status, **counts))
+
     def stop(self, *, drain_timeout_s: float = 5) -> None:
         if self._server is None:
             self._client.close()
@@ -380,7 +388,10 @@ class _GatewayResponse(Response):
             if self.exchange is not None:
                 self.exchange["finished_at"] = time.time()
                 with anyio.CancelScope(shield=True):
-                    await run_in_threadpool(self.gateway._trace.finish, self.exchange)
+                    try:
+                        await run_in_threadpool(self.gateway._trace.finish, self.exchange)
+                    finally:
+                        self.gateway._model_event(self.exchange, "delivered" if self.exchange.get("delivered") else "delivery_failed")
 
     def _failed(self, error, error_traceback):
         if self.exchange is not None:
