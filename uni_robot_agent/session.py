@@ -329,7 +329,10 @@ class Session:
             if args.instruction is None:
                 args.instruction = assembly.integration_session.episode.instruction
             self.events.emit(SessionOpened(integration=args.integration, instruction=args.instruction,
-                unobserved_model_roles=("actor_reviewer",) if getattr(args, "vla_review", False) else ()))
+                unobserved_model_roles=("actor_reviewer",) if (
+                    getattr(args, "vla_review", None) is True or
+                    getattr(args, "action_profile", None) == "hybrid" and
+                    getattr(args, "vla_review", None) is not False) else ()))
             return self
         except BaseException as error:
             if self._assembly is not None:

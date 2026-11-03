@@ -265,7 +265,8 @@ def test_hold_native_end_and_pixel_projection():
         "valid_count": 1, "points_xyz": [[float("nan"), .2, .3]]}})["status"] == "unknown"
 
 
-def test_session_closes_then_summary_matches_actual_jsonl(tmp_path, monkeypatch):
+@pytest.mark.parametrize("profile", ["direct", "hybrid"])
+def test_session_closes_then_summary_matches_actual_jsonl(tmp_path, monkeypatch, profile):
     import uni_robot_agent.session as module
     from uni_robot_agent.artifacts.store import ArtifactStore
     from uni_robot_agent.artifacts.records import RunRecord
@@ -273,7 +274,8 @@ def test_session_closes_then_summary_matches_actual_jsonl(tmp_path, monkeypatch)
     from uni_robot_agent.telemetry import NullTracer
     from unittest.mock import Mock
     args = SimpleNamespace(output_dir=str(tmp_path), integration="fixture", agent_backend=None,
-        model="fixture", episode_timeout_s=None, instruction="fixture", max_turns=50, reasoning_effort="none")
+        model="fixture", episode_timeout_s=None, instruction="fixture", max_turns=50, reasoning_effort="none",
+        action_profile=profile, vla_review=None)
     integration = SimpleNamespace(episode=SimpleNamespace(instruction="fixture"), close=Mock(),
         finalize=Mock(return_value=EpisodeOutcome(success=False, metadata={"score": 0.2, "steps": 3})))
 
@@ -299,6 +301,7 @@ def test_session_closes_then_summary_matches_actual_jsonl(tmp_path, monkeypatch)
         assert replayed[key] == summary[key]
     assert summary["metrics"]["K"] == 1
     assert summary["metrics"]["T"] >= 0
+    assert ("unobserved_model_roles" in summary["missing_reasons"]["L_gen"]) == (profile == "hybrid")
     assert integration.finalize.call_count == 1
     session.finish()
     assert integration.finalize.call_count == 1
