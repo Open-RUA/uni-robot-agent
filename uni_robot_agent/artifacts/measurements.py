@@ -216,6 +216,8 @@ class RunMeasurements:
         try:
             def git(*args):
                 return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.DEVNULL)
+            if Path(git("rev-parse", "--show-toplevel").decode().strip()).resolve() != root.resolve():
+                raise OSError("Installed package is not the enclosing repository's source")
             diff = git("diff", "HEAD", "--", ".")
             untracked = git("ls-files", "--others", "--exclude-standard").decode().splitlines()
             files = {name: hashlib.sha256((root / name).read_bytes()).hexdigest()

@@ -337,8 +337,11 @@ class Session:
                 self.finish(error=f"Session startup failed: {error}")
             else:
                 self._closed = True
-                self._measurements.finish({"error": f"Session startup failed: {type(error).__name__}",
-                                           "task_success": None, "accepted": False})
+                try:
+                    self._measurements.finish({"error": f"Session startup failed: {type(error).__name__}",
+                                               "task_success": None, "accepted": False})
+                except Exception:
+                    logger.exception("Could not persist the failed startup attempt")
                 close_resource(self._agent)
                 close_resource(self._subscriptions)
             raise

@@ -333,3 +333,19 @@ def test_unobserved_hybrid_reviewer_invalidates_full_token_total():
     result = summarize(source)
     assert result["metrics"]["L_gen"] is None
     assert "unobserved_model_roles" in result["missing_reasons"]["L_gen"]
+
+
+def test_startup_storage_failure_does_not_mask_original_error(tmp_path, monkeypatch):
+    import uni_robot_agent.session as module
+    args = SimpleNamespace(output_dir=str(tmp_path), integration="fixture", agent_backend=None,
+                           episode_timeout_s=None, instruction="fixture")
+    def fail(args):
+        raise RuntimeError("original startup error")
+    def disk_failure(*args):
+        raise OSError("fixture disk full")
+    monkeypatch.setattr(module, "assemble_session", fail)
+    monkeypatch.setattr(module.RunMeasurements, "finish", disk_failure)
+    session = module.Session._from_resolved(args)
+    with pytest.raises(RuntimeError, match="original startup error"):
+        session.start()
+    assert session._closed
