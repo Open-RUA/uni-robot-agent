@@ -6,7 +6,6 @@ import json
 import math
 import re
 import subprocess
-import threading
 from collections import Counter
 from pathlib import Path
 
@@ -95,6 +94,8 @@ def summarize(records):
             continue
         executions.setdefault(identity, {})[row["phase"]] = row
     for row in of_type("ToolResult"):
+        if row.get("effect_assessment", {}).get("reason") == "assessment_error":
+            issues.append("tool_assessment_error")
         identity = row.get("execution_id")
         if not identity:
             issues.append("unpaired_tool_result")
@@ -127,12 +128,14 @@ def summarize(records):
     for row in of_type("ModelRequest"):
         model.setdefault(row.get("exchange_id"), {})[row["phase"]] = row
     delivered = all("delivered" in phases or "delivery_failed" in phases for phases in model.values())
+    covered_requests = {identity[0] for identity in attempts}
+    usage_covered = bool(model) and set(model) == covered_requests
     token_totals = {}
     for name, field in (("L_gen", "generated_tokens"), ("L_think", "think_tokens"), ("L_other", "other_tokens")):
         values = [phases.get("finished", {}).get(field) for phases in attempts.values()]
         valid = bool(values) and all(type(v) is int and v >= 0 for v in values)
         valid = valid and all("started" in phases and "finished" in phases for phases in attempts.values())
-        valid = valid and bool(model) and delivered
+        valid = valid and usage_covered and delivered
         valid = valid and not any(r.get("unobserved_model_roles") for r in opened)
         token_totals[name] = sum(values) if valid else None
         if not valid:
@@ -198,13 +201,11 @@ def summarize(records):
 
 
 class RunMeasurements:
-    """Create provenance before startup, then consume the canonical event records."""
+    """Create provenance before startup; summarize the flushed ledger at close."""
 
     def __init__(self, directory, config):
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
-        self.records = []
-        self._lock = threading.Lock()
         self.manifest = {"version": VERSION, "run_id": self.directory.name,
                          "config": redact(config), "phase": "starting", "outcome": None,
                          "source": self._source_identity()}
@@ -233,14 +234,10 @@ class RunMeasurements:
                 package_version = None
             return {"commit": None, "package_version": package_version, "reason": "git_identity_unavailable"}
 
-    def __call__(self, event):
-        from uni_robot_agent.events.subscribers import event_to_record
-        with self._lock:
-            self.records.append(event_to_record(event))
-
     def finish(self, result):
-        with self._lock:
-            summary = summarize(self.records)
+        from uni_robot_agent.artifacts.records import RunRecord
+        events = RunRecord(self.directory).events() if (self.directory / "trajectory.jsonl").is_file() else ()
+        summary = summarize(events)
         summary["result"] = redact(result)
         summary["artifacts_sha256"] = {name: hashlib.sha256(path.read_bytes()).hexdigest()
             for name in ("effective_prompt.md", "tools.json")

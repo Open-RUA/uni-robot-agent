@@ -6,7 +6,7 @@
   CLI/Python sessions, including explicit missing-data reasons and offline replay.
 - Record upstream generation attempts, separate tool interface responsibility
   from direct effects, and preserve background query identity without repeating
-  the original action's failure. See [measurement contracts](docs/measurements.md).
+  the original action's failure.
 
 ## 0.1.0 — 2026-11-03
 

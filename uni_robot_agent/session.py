@@ -323,7 +323,6 @@ class Session:
             if self._console:
                 self._subscriptions.add(ConsoleSubscriber())
             self._subscriptions.add(EventJsonlSubscriber(assembly.session_dir, artifacts=assembly.artifacts))
-            self._subscriptions.add(self._measurements)
             assembly.toolkit.set_event_bus(self.events)
             connect_execution_events(assembly.executor, self.events)
             self._tools = ToolClient(assembly.executor, self._require_active)

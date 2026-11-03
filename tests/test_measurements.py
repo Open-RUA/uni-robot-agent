@@ -74,6 +74,16 @@ def test_mixed_clocks_and_conflicting_replay():
     assert summarize(source + [duplicate])["metrics"]["K"] is None
 
 
+def test_every_model_request_requires_its_own_provider_usage():
+    source = records()
+    for phase in ("started", "delivered"):
+        source.append(dict(type="ModelRequest", exchange_id="unobserved", phase=phase,
+            event_seq=len(source) + 1, monotonic_s=8, clock_id="clock", session_id="run"))
+    result = summarize(source)
+    assert result["metrics"]["L_gen"] is None
+    assert not result["core_complete"]
+
+
 def test_retry_usage_counts_discarded_generation_and_missing_partition():
     source = records()
     source += [dict(type="ProviderAttempt", phase=phase, exchange_id="m", attempt=2,
@@ -136,6 +146,23 @@ def test_domains_do_not_become_policy_errors():
     assert assess_call({"success": False, "error": "rejected"})["fault_owner"] == "unknown"
     assert assess_call({"success": False, "error": "service", "call_error": {
         "fault_owner": "infrastructure", "code": "transport"}})["penalty_eligible"] is False
+
+
+def test_assessment_failure_preserves_executed_tool_result(monkeypatch):
+    from uni_robot_agent.tools import assessment
+    bus, toolkit = EventBus(), Toolkit()
+    toolkit.set_event_bus(bus)
+    output = ToolOutput(extra={"feedback": {"steps_executed": 1}})
+    toolkit.register_tools(bind_tools([ToolSpec("hold", "Fixture", schema({}))],
+        provider_id="fixture", handlers={"hold": lambda: output}))
+    def broken_assessor(*args, **kwargs):
+        raise ValueError("fixture diagnostic failure")
+    monkeypatch.setattr(assessment, "assess_effect", broken_assessor)
+    assert toolkit.execute_tool("hold", {}) is output
+    event = event_to_record(bus.replay()[-1])
+    assert event["call_assessment"]["status"] == "success"
+    assert event["effect_assessment"]["reason"] == "assessment_error"
+    assert event["output"] == output.to_dict()
 
 
 def test_released_effect_contract_uses_metric_opening_not_legacy_threshold():

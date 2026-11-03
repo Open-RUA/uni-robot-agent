@@ -156,14 +156,21 @@ class Toolkit:
             from uni_robot_agent.events import ToolResult as ToolResultEvent
             from uni_robot_agent.execution import current_execution_id
             from uni_robot_agent.execution.correlation import current_call
-            from uni_robot_agent.tools.assessment import assess_call, assess_effect
+            from uni_robot_agent.tools.assessment import VERSION, assess_call, assess_effect
             output = result.to_dict()
+            try:
+                call_assessment = call_assessment or assess_call({**output, "call_error": result.call_error})
+                effect_assessment = assess_effect(name, output, image_count=len(result.images))
+            except Exception as error:
+                # Diagnostics must not replace a completed action's result.
+                call_assessment = call_assessment or {"version": VERSION, "status": "unknown", "fault_owner": "unknown"}
+                effect_assessment = {"version": VERSION, "status": "unknown", "reason": "assessment_error",
+                                     "error_type": type(error).__name__}
             self._event_bus.emit(ToolResultEvent(
                 tool_name=name, arguments=arguments, success=result.success,
                 output=output, images=tuple(result.images), tool_execution_seq=sequence,
                 execution_id=current_execution_id() or "", **current_call(),
-                call_assessment=call_assessment or assess_call({**output, "call_error": result.call_error}),
-                effect_assessment=assess_effect(name, output, image_count=len(result.images)),
+                call_assessment=call_assessment, effect_assessment=effect_assessment,
             ))
 
     def get_tool_names(self) -> list[str]:

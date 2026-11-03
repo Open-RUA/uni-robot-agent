@@ -45,10 +45,6 @@ grounding, while action feedback and images let the agent assess outcomes.
 Official task outcomes remain available for evaluation and saved results;
 `finish` returns a submission acknowledgement to the agent, not the verdict.
 
-Reward-independent timing, token, call and completeness records are described
-in [rollout measurements](measurements.md). They consume execution facts without
-changing native task grading or enabling an efficiency reward.
-
 The software also supports depth-enabled configurations, including paired RGB-D
 sensors on physical robots. RoboDojo captures simulator depth by default, so
 the paper's RGB-only setting must be selected explicitly. See
