@@ -7,6 +7,8 @@
 - Record upstream generation attempts, separate tool interface responsibility
   from direct effects, and preserve background query identity without repeating
   the original action's failure.
+- Omit empty Chat tool declarations so providers that reject `tools: []` can
+  accept requests without function tools.
 
 ## 0.1.0 — 2026-11-03
 
