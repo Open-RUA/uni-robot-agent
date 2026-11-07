@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +13,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from uni_robot_agent.context.prompt import get_prompt_builder
+from uni_robot_agent.provider.headers import parse_provider_headers
 
 
 def _nonnegative(value: str) -> int:
@@ -48,6 +50,12 @@ def resolve_config(args, parser, integration_spec, argv=()):
 def resolve_settings(args, integration_spec, *, explicit=(), agent_enabled=True):
     """Resolve one runtime configuration without parsing arguments or exiting."""
     explicit = set(explicit)
+    raw_headers = getattr(args, "provider_headers", None)
+    if raw_headers is None:
+        raw_headers = getattr(args, "_provider_headers", None)
+    args._provider_headers = parse_provider_headers(raw_headers)
+    # The raw CLI entries contain secret values; keep only the internal parsed copy.
+    vars(args).pop("provider_headers", None)
     from uni_robot_agent.agents.registry import get_agent_backend
     if agent_enabled:
         get_agent_backend(args.agent_backend).resolve_defaults(args)
@@ -148,7 +156,8 @@ def public_config(args) -> dict:
     result = {
         k: str(v) if isinstance(v, Path) else v
         for k, v in vars(args).items()
-        if k not in {"print_config", "validate_config"} and not k.startswith("_")
+        if k not in {"print_config", "provider_headers", "validate_config"}
+        and not k.startswith("_")
     }
     # URLs may contain credentials or query tokens; strip them from all configuration output.
     for name, value in result.items():
@@ -196,6 +205,7 @@ class AgentModelConfig:
     max_retries: int
     retry_backoff_initial_s: float
     parallel_tool_calls: bool
+    provider_headers: Mapping[str, str] | None = None
 
 
 def resolve_agent_model_config(args) -> AgentModelConfig:
@@ -207,6 +217,7 @@ def resolve_agent_model_config(args) -> AgentModelConfig:
         max_retries=args.provider_retries,
         retry_backoff_initial_s=args.provider_retry_backoff_s,
         parallel_tool_calls=args.model_parallel_tool_calls,
+        provider_headers=dict(getattr(args, "_provider_headers", None) or {}),
     )
 
 
@@ -223,6 +234,9 @@ class AgentConfig(BaseModel):
     provider_url: str | None = None
     provider_profile: str | None = None
     api_key: str | None = Field(default=None, exclude=True, repr=False)
+    provider_headers: dict[str, str] | None = Field(
+        default=None, exclude=True, repr=False
+    )
     provider_timeout_s: int = Field(default=600, gt=0)
     provider_retries: int = Field(default=2, ge=0)
     provider_retry_backoff_s: int = Field(default=5, ge=0)
@@ -287,7 +301,12 @@ class SessionConfig(BaseModel):
             name: field.get_default() for name, field in AgentConfig.model_fields.items()
             if name not in {"model", "api_key"}
         })
-        values.update(command="run", deploy=None, _api_key=agent.api_key if agent else None)
+        values.update(
+            command="run",
+            deploy=None,
+            _api_key=agent.api_key if agent else None,
+            _provider_headers=agent.provider_headers if agent else None,
+        )
         if self.agent is None:
             values.update(agent_backend=None, model=None)
         if "vla_review_api_key" in values:

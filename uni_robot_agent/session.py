@@ -768,6 +768,7 @@ def _run_agent(
             max_retries=model_config.max_retries,
             retry_backoff_initial_s=model_config.retry_backoff_initial_s,
             model_parallel_tool_calls=model_config.parallel_tool_calls,
+            provider_headers=model_config.provider_headers,
             save_raw_request=save_raw_request,
             save_exchanges=save_exchanges,
             tracer=tracer,

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add repeatable `--provider-header NAME=VALUE` and
+  `AgentConfig(provider_headers=...)` for validated custom main-agent upstream
+  headers, with case-insensitive override and redacted configuration. The Hybrid
+  reviewer keeps its own model client.
 - Add experimental OpenCode and Gemini CLI backends with Qwen protocol bridges,
   explicit tool-call identity, response delivery gates and isolated subprocess
   state in `tool_calling` interaction mode. Gemini requires a separately built
