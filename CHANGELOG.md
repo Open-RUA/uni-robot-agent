@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add an offline `uni-robot-agent archive` command that writes one saved run
+  directory into a portable `.tar.gz` bundle with a SHA-256 manifest, skipping
+  credential files, agent state and symlinks, and optionally media or provider
+  traces. See [archive a saved run](docs/running.md#archive-a-saved-run).
 - Add experimental OpenCode and Gemini CLI backends with Qwen protocol bridges,
   explicit tool-call identity, response delivery gates and isolated subprocess
   state in `tool_calling` interaction mode. Gemini requires a separately built

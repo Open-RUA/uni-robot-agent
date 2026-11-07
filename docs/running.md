@@ -15,6 +15,7 @@ its root as the working directory. Launch the CLI as `uni-robot-agent`,
 | `run --env-url URL` | Run the agent in an independently prepared episode |
 | `tui --env-url URL` | Open the interactive terminal for an existing episode |
 | `monitor --run-dir PATH [PATH ...]` | View saved directories, with cards for multiple runs |
+| `archive --run-dir PATH --output PATH` | Write one saved run directory into a portable `.tar.gz` bundle |
 
 Add `--monitor` to `run` for a live Web console. TUI does not accept local
 deployment or monitor flags. The [Python SDK](sdk.md) exposes the same session
@@ -649,3 +650,56 @@ Live monitors add `monitor.json`, `monitor_frames.jsonl` and content-addressed
 
 Keep the associated environment `artifacts/` and `images/` directories for full
 physical-step replay; planner tool-output images alone omit intermediate views.
+
+## Archive a saved run
+
+`archive` is offline: it reads one saved run directory and needs no model,
+environment or integration. The output is a portable `.tar.gz` bundle whose
+files keep their path relative to the run directory, plus a
+`ura_bundle_manifest.json` at the bundle root. The manifest records the format
+version, creation time, package version, absolute source path, options, every
+file's size and SHA-256, every exclusion with its reason, and the file/byte
+totals. The bundle is written to a temporary file and moved into place only
+after a complete write, so a failure leaves no partial output.
+
+```bash
+# Include saved media and provider traces (the defaults).
+uni-robot-agent archive \
+  --run-dir ./runs/robodojo_... \
+  --output ./run.tar.gz
+
+# A smaller bundle for a report, without images/videos or provider traces.
+uni-robot-agent archive \
+  --run-dir ./runs/robodojo_... \
+  --output ./run-small.tar.gz \
+  --no-media --no-traces
+
+# Replace an existing output bundle.
+uni-robot-agent archive \
+  --run-dir ./runs/robodojo_... \
+  --output ./run.tar.gz --force
+```
+
+`--no-media` excludes `images/`, `videos/`, `monitor_media/` and common
+image/video suffixes. `--no-traces` excludes `codex_responses/`,
+`claude_messages/`, `telemetry/`, `codex/` and `logs/`. The output parent must
+already exist, and `--output` must not point inside the run directory.
+
+Always excluded, even when media and traces are included:
+
+- Agent and generated state: `.claude/`, `.codex/`, `.agents/`, `home/`,
+  `scratch/`, `tmp/`, `__pycache__/` and `.git/`.
+- Credential-like files: `.env`, `.env.*`, `*.pem`, `*.key`, `*.crt`,
+  `id_rsa*`, `credentials*` and `.netrc`.
+- Symlinks. They are skipped rather than followed, so a bundle cannot pull in
+  files from outside the run directory.
+
+Every skip is listed in the manifest with its reason. Review a bundle before
+sharing it: these exclusions reduce risk but do not make an archive safe to
+publish. To replay a received bundle, extract it and point the monitor at the
+extracted directory:
+
+```bash
+tar -xzf run.tar.gz -C ./shared/run
+uni-robot-agent monitor --run-dir ./shared/run
+```
