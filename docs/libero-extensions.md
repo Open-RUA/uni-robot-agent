@@ -126,3 +126,16 @@ calibration while retaining wrist calibration.
 These bounded motion probes did not solve the tasks. Only their required assets
 were unpacked; this validation does not establish complete suite coverage or a
 benchmark success rate.
+
+Subsequent Qwen3.8-Flash Direct episodes completed the Plus spatial task 0 and
+PRO spatial-swap task 0 with native `task_success=true`, after 155 and 117
+native actions respectively. Both used seed 0, initial-state index 0, RGB without
+depth, camera calibration, SAM and runtime skills. The planner used Codex
+`tool_calling`, max reasoning, a three-hour wall-clock budget and no turn limit.
+The native service reported success independently of agent completion; the PRO
+agent ended without calling `finish`.
+
+These are two individual integration trials on the pre-merge implementation,
+not suite-level scores or verification of later shared-harness changes. Native
+SDK shell tools were available for scratch calculations and image inspection;
+the trials are not presented as a fully audited benchmark evaluation.

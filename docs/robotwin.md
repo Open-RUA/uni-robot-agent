@@ -88,3 +88,15 @@ errors: the saved images contained the scene, but visibly retained ray-tracing
 noise. Rendering quality needs validation on the deployment's driver/runtime
 before score comparisons. Other tasks, randomized configurations and complete
 benchmark success rates have not been established by this probe.
+
+A subsequent Qwen3.8-Flash Direct episode on the same task and seed executed
+395 of 400 native actions and ended with native `task_success=false`. It used
+RGB without depth, calibration, SAM, runtime skills and Codex `tool_calling`
+with max reasoning. The planner stopped without calling `finish`; the recorded
+run lasted approximately 94.5 minutes and did not report a provider exception.
+The failed grasp attempts establish an unsuccessful task trial, not a diagnosed
+collision-model defect: the planner's explanation needs independent native
+contact/geometry checks. The known rendering limitation also remains.
+
+This trial used the pre-merge implementation and does not verify later shared
+harness changes or establish a benchmark success rate.
