@@ -89,6 +89,7 @@ create the owned environment before the agent connects.
 | `--sam3-url` / `--no-sam3` | Explicit choice | Configure SAM3 or disable it |
 | `--provider-url` | Environment or SDK native provider | Upstream base URL; required for Claude, also accepts `ANTHROPIC_BASE_URL` |
 | `--provider-profile` | Protocol-specific passthrough | See the [provider profiles](providers.md#profiles); the selected planner determines input compatibility |
+| `--provider-header` | None | Repeatable `NAME=VALUE` upstream HTTP header; replaces an SDK header with the same name |
 | `--provider-timeout-s` | `600` | Main agent HTTP request timeout |
 | `--provider-retries` | `2` | Extra attempts per provider request |
 | `--provider-retry-backoff-s` | `5` | Provider retry backoff |

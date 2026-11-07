@@ -54,6 +54,20 @@ or GenerateContent planner, an enabled reviewer needs an explicit `--vla-review-
 binding, the check runs during assembly before model requests. A disabled
 reviewer opens no model client.
 
+## Custom upstream headers
+
+The main-agent gateway accepts custom upstream HTTP headers through the repeatable
+`--provider-header NAME=VALUE` CLI option or `AgentConfig(provider_headers=...)`.
+Names must be RFC 7230 tokens and values cannot contain CR, LF or NUL. Hop-by-hop,
+`Host` and `Content-Length` headers are rejected before any connection. Names are
+case-insensitive and the last duplicate wins; a custom header replaces the
+SDK-supplied header with the same name instead of sending both. This supports
+OpenAI-compatible gateways (for example OpenRouter attribution), Azure-style
+`api-key` authentication and corporate gateways. Header values are secrets and
+are omitted from `--print-config`, `AgentConfig` repr and serialized configuration.
+The Hybrid reviewer keeps its own model client and is not affected; configure
+headers there separately if a future reviewer option provides them.
+
 ## Ownership and extension
 
 Paths are relative to `uni_robot_agent/provider/`.

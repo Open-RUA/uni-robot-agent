@@ -110,6 +110,9 @@ contains model transport, retry, context and backend options. Claude uses a
 Messages-compatible provider (`provider_profile="passthrough.messages"`) and its `claude_effort` / `claude_max_budget_usd`
 settings. Explicit options for a different backend are rejected.
 Credentials can use `AgentConfig(api_key=...)` or the existing environment settings.
+`AgentConfig(provider_headers={...})` adds or overrides main-agent upstream HTTP
+headers, for example OpenRouter attribution fields or an `api-key` credential;
+header values are excluded from repr and serialized configuration.
 Secret keys are excluded from persisted public configuration; endpoint credentials
 and query strings are stripped from that snapshot.
 

@@ -23,6 +23,7 @@ from uni_robot_agent.provider.contracts import (
     EncodedRequest,
     ProviderAdapter,
 )
+from uni_robot_agent.provider.headers import parse_provider_headers
 from uni_robot_agent.provider.recording.exchanges import (
     ExchangeStore,
     attach_wire_views,
@@ -76,11 +77,13 @@ class ProviderGateway:
         retry_backoff_initial_s: float = 2,
         model_parallel_tool_calls: bool = True,
         model_binding: ModelBinding | None = None,
+        provider_headers: Mapping[str, str] | None = None,
         event_bus=None,
         tracer=None,
     ) -> None:
         self._upstream_base_url = upstream_base_url.rstrip("/")
         self._host = host
+        self._provider_headers = parse_provider_headers(provider_headers)
         self._tracer = tracer or NullTracer()
         self._protocol = protocol or ResponsesProtocol()
         self._adapter = adapter or build_provider_adapter(
@@ -174,13 +177,18 @@ class ProviderGateway:
         target = self._adapter.target_url(
             self._upstream_base_url, request_path
         )
+        custom_names = {name.lower() for name in self._provider_headers}
         headers = {
             key: value
             for key, value in incoming_headers.items()
             if key.lower() not in _HOP_BY_HOP_HEADERS
             and key.lower() not in {"host", "accept-encoding"}
+            and key.lower() not in custom_names
         }
         headers["Accept-Encoding"] = "identity"
+        # Custom names were removed above so overriding Authorization or X-Api-Key
+        # cannot leave two differently-cased copies on the wire.
+        headers.update(self._provider_headers)
 
         exchange: dict[str, Any] | None = None
         prepared: PreparedContext | None = None

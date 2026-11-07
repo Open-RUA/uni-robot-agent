@@ -28,6 +28,14 @@ def add_model_arguments(parser):
     )
     options.add_argument("--provider-url")
     options.add_argument(
+        "--provider-header",
+        dest="provider_headers",
+        action="append",
+        default=None,
+        metavar="NAME=VALUE",
+        help="Repeatable custom upstream HTTP header; replaces the SDK header with the same name",
+    )
+    options.add_argument(
         "--provider-profile",
         choices=list_provider_profiles(),
         default=None,
