@@ -15,6 +15,7 @@ its root as the working directory. Launch the CLI as `uni-robot-agent`,
 | `run --env-url URL` | Run the agent in an independently prepared episode |
 | `tui --env-url URL` | Open the interactive terminal for an existing episode |
 | `monitor --run-dir PATH [PATH ...]` | View saved directories, with cards for multiple runs |
+| `runs --run-dir PATH [PATH ...]` | Summarize saved directories in the terminal; read-only and offline |
 
 Add `--monitor` to `run` for a live Web console. TUI does not accept local
 deployment or monitor flags. The [Python SDK](sdk.md) exposes the same session
@@ -649,3 +650,28 @@ Live monitors add `monitor.json`, `monitor_frames.jsonl` and content-addressed
 
 Keep the associated environment `artifacts/` and `images/` directories for full
 physical-step replay; planner tool-output images alone omit intermediate views.
+
+## Inspect saved runs
+
+`runs` prints a table of saved run directories without starting a Web server or
+loading a model, environment or agent SDK. It reads the existing `result.json`,
+`monitor.json`, `supervisor.json` and `native_outcome.json` records and does not
+modify them; discovery also recognizes `trajectory.jsonl` and `deployment.json`
+markers.
+
+```bash
+# Summarize every recorded run under a parent directory.
+uni-robot-agent runs --run-dir ./runs
+
+# Machine-readable output for scripts or cluster logs.
+uni-robot-agent runs --run-dir ./runs --format json
+
+# Filter, order and cap the rows; a stale live monitor is reported as stale.
+uni-robot-agent runs --run-dir ./runs --status failed --sort duration --reverse --limit 5
+```
+
+The table reports the recorded status, task, model, steps, elapsed time and
+directory for each run. `--format table|json|csv`, `--status`, `--sort`,
+`--reverse` and `--limit` select the output; JSON and CSV keep the same fields.
+The totals line reports the success rate over known outcomes only, so running or
+ungraded runs do not lower it. A missing value is shown as `-`.
