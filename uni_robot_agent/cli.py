@@ -11,6 +11,7 @@ from pathlib import Path
 from uni_robot_agent import __version__
 from uni_robot_agent.config import (
     _nonnegative,
+    _positive,
     public_config,
     resolve_config,
 )
@@ -144,6 +145,26 @@ def build_parser(integration_spec=None) -> argparse.ArgumentParser:
                          help="One or more runs or parent directories containing runs")
     monitor.add_argument("--host", default="127.0.0.1")
     monitor.add_argument("--port", type=int, default=8765)
+    runs = subparsers.add_parser(
+        "runs",
+        help="List and summarize saved run directories in the terminal; no model or environment required",
+        allow_abbrev=False,
+    )
+    runs.add_argument("--run-dir", type=Path, nargs="+", action="extend", required=True,
+                      help="One or more runs or parent directories containing runs")
+    runs.add_argument("--format", choices=("table", "json", "csv"), default="table")
+    runs.add_argument(
+        "--status",
+        choices=("all", "success", "failed", "finished", "running", "starting",
+                 "deploying", "finishing", "error", "unknown", "stale",
+                 "deployment_failed", "environment_failed", "episode_timeout",
+                 "cancelled"),
+        default="all",
+    )
+    runs.add_argument("--sort", choices=("path", "started", "duration", "task"), default="path")
+    runs.add_argument("--reverse", action="store_true")
+    runs.add_argument("--limit", type=_positive, default=None,
+                      help="Print at most this many runs after filtering and sorting")
     setup = subparsers.add_parser("setup", help="Prepare an isolated runtime and resources", allow_abbrev=False)
     target = setup.add_mutually_exclusive_group(required=True)
     target.add_argument("--integration")
@@ -190,6 +211,13 @@ def main(argv=None, *, _supervised=False) -> None:
     if args.command is None:
         parser.print_help()
         raise SystemExit(1)
+    if args.command == "runs":
+        from uni_robot_agent.ui.runs import print_runs
+        try:
+            print_runs(args)
+        except (ValueError, OSError) as error:
+            parser.exit(1, f"{error}\n")
+        return
     if args.command == "monitor":
         from uni_robot_agent.ui.web.runtime import serve_directories
         try:

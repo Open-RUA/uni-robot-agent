@@ -5,7 +5,6 @@ import asyncio
 from pathlib import Path
 import hashlib
 import json
-import os
 import io
 from functools import lru_cache
 import threading
@@ -15,6 +14,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from starlette.concurrency import run_in_threadpool
 
+from uni_robot_agent.artifacts.discovery import discover
 from .reader import RunReader
 
 STATIC = Path(__file__).parent / 'static'
@@ -30,29 +30,6 @@ def preview_image(path, modified_ns, width):
         stream = io.BytesIO()
         image.save(stream, format='JPEG', quality=82)
         return stream.getvalue()
-
-
-def discover(paths):
-    roots = []
-    for raw in paths:
-        path = Path(raw).expanduser().resolve()
-        if not path.is_dir():
-            raise ValueError(f'Run directory does not exist: {path}')
-        if any((path / f).is_file() for f in ('result.json', 'trajectory.jsonl', 'monitor.json', 'deployment.json')):
-            roots.append(path)
-        else:
-            found = set()
-            # Image/model caches are leaves, not potential run directories.
-            for directory, children, files in os.walk(path, followlinks=False):
-                children[:] = [n for n in children if n not in {
-                    'images', 'artifacts', 'videos', 'monitor_media', '.codex',
-                    'codex_responses', 'telemetry', 'scratch', 'home', 'tmp',
-                }]
-                if set(files) & {'result.json', 'trajectory.jsonl', 'monitor.json'}:
-                    found.add(Path(directory))
-                    children[:] = []
-            roots.extend(sorted(found))
-    return list(dict.fromkeys(roots))
 
 
 class Collection:
