@@ -15,6 +15,7 @@ its root as the working directory. Launch the CLI as `uni-robot-agent`,
 | `run --env-url URL` | Run the agent in an independently prepared episode |
 | `tui --env-url URL` | Open the interactive terminal for an existing episode |
 | `monitor --run-dir PATH [PATH ...]` | View saved directories, with cards for multiple runs |
+| `doctor` | Diagnose the installation and configuration offline |
 
 Add `--monitor` to `run` for a live Web console. TUI does not accept local
 deployment or monitor flags. The [Python SDK](sdk.md) exposes the same session
@@ -52,6 +53,42 @@ Unsupported historical environment variables are not interpreted. In particular,
 `UNI_ROBOT_AGENT_CONTEXT_*`, `UNI_ROBOT_AGENT_EXECUTION_MODE`, `UNI_ROBOT_AGENT_REASONING_EFFORT`,
 `UNI_ROBOT_AGENT_TELEMETRY` and `UNI_ROBOT_AGENT_MCP_*` settings do not replace CLI flags.
 See the [changelog](../CHANGELOG.md) when updating an earlier experiment script.
+
+## Diagnose an installation
+
+`doctor` checks one installation and environment without resolving a run
+configuration. It is offline: it does not connect to services, download assets,
+probe credentials or create directories. Use it when an episode cannot start or
+when support needs the installed package, dependency and configuration state.
+
+```bash
+# Human-readable aligned report and summary
+uni-robot-agent doctor
+
+# Machine-readable report for a support ticket
+uni-robot-agent doctor --json
+
+# Require one integration and fail when it is unavailable
+uni-robot-agent doctor --integration robodojo
+```
+
+Checks cover the Python version, the installed `uni-robot-agent` version and
+main/runtime package split, required imports, the Codex and Claude Agent SDKs,
+the optional `opencode` and `gemini` binaries, provider profiles, the known
+integration adapters, the packaged or `UNI_ROBOT_AGENT_SKILLS_DIR` skills root,
+output-directory writability and the presence of configuration environment
+variables. Environment-variable checks report `set`/`unset` only; values are
+never read or printed.
+
+Each check is `ok`, `warn`, `fail` or `skip`; hints explain warnings and
+failures. The command exits `0` when no check fails, including when warnings or
+skips remain, and `1` when any check fails. A missing optional integration is a
+warning by default; naming it with `--integration NAME` makes it a failure.
+
+Binaries are located with `PATH` lookup only. Pass `--check-binaries` to also
+run `opencode --version` or `gemini --version` with a short timeout. Use
+`--output-dir PATH` to check a different parent directory than
+`UNI_ROBOT_AGENT_OUTPUT_DIR` or the default `outputs`.
 
 ## Single-episode CLI
 

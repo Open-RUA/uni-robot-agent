@@ -18,6 +18,53 @@ from uni_robot_agent.agents import get_agent_backend, list_agent_backends
 from uni_robot_agent.integrations import load_integration
 
 
+def _add_doctor_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Print the report as a machine-readable JSON object",
+    )
+    parser.add_argument(
+        "--integration",
+        metavar="NAME",
+        help="Check only this integration and fail when it is unavailable",
+    )
+    parser.add_argument(
+        "--output-dir",
+        metavar="PATH",
+        help="Override the output-directory writability check",
+    )
+    parser.add_argument(
+        "--check-binaries",
+        action="store_true",
+        help="Run --version on opencode/gemini with a short timeout; disabled by default",
+    )
+
+
+def _run_doctor(argv: list[str]) -> int:
+    """Parse and run the offline doctor command without resolving a run configuration."""
+    from uni_robot_agent import doctor
+
+    parser = argparse.ArgumentParser(
+        prog="uni-robot-agent doctor",
+        description="Diagnose the installation and configuration offline; no model, credentials or environment required.",
+        allow_abbrev=False,
+    )
+    _add_doctor_arguments(parser)
+    args = parser.parse_args(argv)
+    try:
+        report = doctor.run_checks(
+            integration=args.integration,
+            output_dir=args.output_dir,
+            check_binaries=args.check_binaries,
+        )
+    except (ValueError, OSError) as error:
+        parser.exit(1, f"{error}\n")
+    print(doctor.render_json(report) if args.json_output else doctor.render_table(report))
+    return 0 if report.ok else 1
+
+
 def _probe_integration_name(argv: list[str] | None = None) -> str | None:
     probe = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     probe.add_argument("command", nargs="?")
@@ -144,6 +191,12 @@ def build_parser(integration_spec=None) -> argparse.ArgumentParser:
                          help="One or more runs or parent directories containing runs")
     monitor.add_argument("--host", default="127.0.0.1")
     monitor.add_argument("--port", type=int, default=8765)
+    doctor = subparsers.add_parser(
+        "doctor",
+        help="Diagnose the installation and configuration offline",
+        allow_abbrev=False,
+    )
+    _add_doctor_arguments(doctor)
     setup = subparsers.add_parser("setup", help="Prepare an isolated runtime and resources", allow_abbrev=False)
     target = setup.add_mutually_exclusive_group(required=True)
     target.add_argument("--integration")
@@ -176,6 +229,10 @@ def build_parser(integration_spec=None) -> argparse.ArgumentParser:
 
 def main(argv=None, *, _supervised=False) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
+    # Doctor must run before integration probing and configuration resolution:
+    # it needs no integration, model or credential and must not import runtimes.
+    if argv and argv[0] == "doctor":
+        raise SystemExit(_run_doctor(argv[1:]))
     integration_name = _probe_integration_name(argv)
     try:
         integration_spec = (
