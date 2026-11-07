@@ -1,9 +1,13 @@
 """Upstream model calls, context preparation and bounded exchange retries."""
 
 from __future__ import annotations
+import email.utils
 import json
+import math
+import re
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Any
 from uni_robot_agent.context import ContextManager, PreparedContext
 from uni_robot_agent.context.history import create_context_policy
@@ -195,7 +199,13 @@ class ModelClient:
                     or not isinstance(exc, self._retryable_exceptions)
                 ):
                     raise
-                self._wait_before_retry(attempt, "transport error")
+                self._wait_before_retry(
+                    attempt,
+                    "transport error",
+                    exc.response.headers
+                    if isinstance(exc, HttpCallError) and exc.response is not None
+                    else None,
+                )
                 continue
             record = {
                 "attempt": attempt + 1,
@@ -233,7 +243,9 @@ class ModelClient:
                     )
                 return status, response_headers, body
             self._wait_before_retry(
-                attempt, failure["code"] if failure else f"HTTP {status}"
+                attempt,
+                failure["code"] if failure else f"HTTP {status}",
+                response_headers,
             )
         raise RuntimeError("provider retry loop ended unexpectedly")
 
@@ -253,14 +265,26 @@ class ModelClient:
         finally:
             self._transport.close()
 
-    def _wait_before_retry(self, attempt: int, reason: str) -> None:
-        delay_s = self._retry_backoff_initial_s * (2**attempt)
+    def _wait_before_retry(
+        self, attempt: int, reason: str, headers: Any = None
+    ) -> None:
+        backoff_s = self._retry_backoff_initial_s * (2**attempt)
+        retry_after_s = _retry_after_delay_s(headers)
+        delay_s = (
+            backoff_s if retry_after_s is None else max(backoff_s, retry_after_s)
+        )
+        source = (
+            " (Retry-After)"
+            if retry_after_s is not None and retry_after_s > backoff_s
+            else ""
+        )
         logger.warning(
-            "Provider request failed (%s); retry %d/%d in %.1fs",
+            "Provider request failed (%s); retry %d/%d in %.1fs%s",
             reason,
             attempt + 1,
             self._max_retries,
             delay_s,
+            source,
         )
         if self._cancelled.wait(delay_s):
             raise ModelRequestCancelled("Model request cancelled")
@@ -312,3 +336,49 @@ def _header_value(headers: Any, name: str) -> str | None:
         if key.lower() == name:
             return str(value)
     return None
+
+
+_DELTA_SECONDS = re.compile(r"[0-9]+(?:\.[0-9]+)?")
+
+
+def _retry_after_delay_s(headers: Any) -> float | None:
+    """Return a valid upstream retry delay in seconds, or None.
+
+    `retry-after-ms` takes precedence when both headers are present, because it
+    carries sub-second precision for the same upstream instruction.
+    """
+    if headers is None:
+        return None
+    milliseconds = _header_value(headers, "retry-after-ms")
+    if milliseconds is not None:
+        delay_s = _scaled_seconds(milliseconds, 0.001)
+        if delay_s is not None:
+            return delay_s
+    retry_after = _header_value(headers, "retry-after")
+    if retry_after is not None:
+        return _parse_retry_after(retry_after)
+    return None
+
+
+def _parse_retry_after(value: str) -> float | None:
+    """Parse Retry-After delta-seconds or an RFC 7231 HTTP-date."""
+    delay_s = _scaled_seconds(value, 1.0)
+    if delay_s is not None:
+        return delay_s
+    try:
+        parsed = email.utils.parsedate_to_datetime(value.strip())
+    except (TypeError, ValueError):
+        return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return max(0.0, (parsed - datetime.now(timezone.utc)).total_seconds())
+
+
+def _scaled_seconds(value: Any, scale: float) -> float | None:
+    text = str(value).strip()
+    if not _DELTA_SECONDS.fullmatch(text):
+        return None
+    seconds = float(text) * scale
+    return seconds if math.isfinite(seconds) else None

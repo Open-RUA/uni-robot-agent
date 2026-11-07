@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Honor upstream `Retry-After` and `retry-after-ms` delays as a minimum when
+  retrying provider requests; exponential backoff remains otherwise.
 - Add experimental OpenCode and Gemini CLI backends with Qwen protocol bridges,
   explicit tool-call identity, response delivery gates and isolated subprocess
   state in `tool_calling` interaction mode. Gemini requires a separately built

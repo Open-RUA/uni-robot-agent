@@ -89,6 +89,13 @@ client protocol and commits SDK bindings only after successful delivery. Keep
 this ordering, cancellation, image evidence, tool identity, and retry behavior
 covered by tests. Messages heartbeat frames do not authorize tool execution.
 
+## Retries and rate limits
+
+Retries wait at least the delay requested by an upstream `Retry-After`
+(delta-seconds or HTTP-date) or `retry-after-ms` header, using the longer of that
+delay and exponential backoff; without a valid header, exponential backoff is
+unchanged. Retries remain cancellable and never reissue physical actions.
+
 ## Python interface
 
 Import public clients and factories from `uni_robot_agent.provider` and interface
