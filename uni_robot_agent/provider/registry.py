@@ -24,6 +24,9 @@ from uni_robot_agent.provider.backends.deepseek.chat_completions import (
 from uni_robot_agent.provider.backends.minimax.chat_completions import (
     MiniMaxChatCompletionsAdapter,
 )
+from uni_robot_agent.provider.backends.openai.chat_completions import (
+    OpenAIChatCompletionsAdapter,
+)
 
 
 @dataclass(frozen=True)
@@ -82,6 +85,12 @@ _PROFILES = {
             "responses",
             "chat_completions",
             MiniMaxChatCompletionsAdapter,
+        ),
+        ProviderProfile(
+            "openai.chat_completions",
+            "responses",
+            "chat_completions",
+            OpenAIChatCompletionsAdapter,
         ),
     )
 }

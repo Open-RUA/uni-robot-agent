@@ -18,6 +18,7 @@ does not identify the hosting service or select an adapter automatically.
 | `moonshot.chat_completions` | Responses | Chat Completions |
 | `deepseek.chat_completions` | Responses | Chat Completions |
 | `minimax.chat_completions` | Responses | Chat Completions |
+| `openai.chat_completions` | Responses | Chat Completions |
 
 Codex declares Responses input; Claude Code declares Messages input. An omitted
 `--provider-profile` resolves to `passthrough.responses` or `passthrough.messages`
@@ -36,6 +37,16 @@ a generic adapter for every model hosted by Alibaba or every service hosting
 Qwen. `volcengine` targets Ark; `moonshot` targets Kimi's service. Supply the
 correct service URL and credentials separately. Passthrough preserves payloads;
 it does not discover or guarantee the remote endpoint's capabilities.
+
+`openai.chat_completions` targets the OpenAI Chat Completions API and compatible
+servers such as vLLM, SGLang and Ollama. The base URL should include the API
+version, for example `https://api.openai.com/v1`. The profile uses only the
+shared Responses-to-Chat conversion: for streaming requests it adds
+`stream_options={"include_usage": True}` unless the caller supplied
+`stream_options`, because OpenAI reports streaming usage only when requested.
+It does not implement OpenAI's Responses API (use `passthrough.responses` for
+that protocol) and it does not add vendor-specific thinking, search, token-limit
+or reasoning-effort fields.
 
 `tencent.responses` targets Tencent TokenHub's Responses endpoint, including
 HY4. It preserves reasoning fields, tool-call identifiers, history and raw

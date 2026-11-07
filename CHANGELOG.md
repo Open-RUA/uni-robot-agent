@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add the generic `openai.chat_completions` provider profile for the OpenAI Chat
+  Completions API and compatible servers. It reuses the shared Responses-to-Chat
+  codec, adds only standard `stream_options` for streaming usage, and injects no
+  vendor-specific thinking, search, token-limit or reasoning-effort fields.
 - Add experimental OpenCode and Gemini CLI backends with Qwen protocol bridges,
   explicit tool-call identity, response delivery gates and isolated subprocess
   state in `tool_calling` interaction mode. Gemini requires a separately built

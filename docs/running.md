@@ -408,7 +408,7 @@ service adds `method="segment"` and its arguments where supported.
 
 The reviewer uses a separate model client to assess proposed action chunks. Configure
 `--vla-review-model`, `--vla-review-base-url`, and `--vla-review-adapter`
-(`passthrough.responses`, `volcengine.responses`, `moonshot.chat_completions`, `aliyun.chat_completions`, `deepseek.chat_completions`, or `minimax.chat_completions`). The model defaults to the main-agent model. Endpoint/profile inheritance requires
+(`passthrough.responses`, `volcengine.responses`, `moonshot.chat_completions`, `aliyun.chat_completions`, `deepseek.chat_completions`, `minimax.chat_completions`, or `openai.chat_completions`). The model defaults to the main-agent model. Endpoint/profile inheritance requires
 a Responses-compatible planner profile; a Messages planner requires an explicit
 reviewer URL and adapter when review is enabled. The reviewer owns its own client
 and request state; disabled review opens no client.
