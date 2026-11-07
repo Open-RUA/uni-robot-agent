@@ -144,6 +144,22 @@ def build_parser(integration_spec=None) -> argparse.ArgumentParser:
                          help="One or more runs or parent directories containing runs")
     monitor.add_argument("--host", default="127.0.0.1")
     monitor.add_argument("--port", type=int, default=8765)
+    archive = subparsers.add_parser(
+        "archive",
+        help="Write one saved run directory into a portable tar.gz bundle with a manifest",
+        allow_abbrev=False,
+    )
+    archive.add_argument("--run-dir", type=Path, required=True, help="Saved run directory to package")
+    archive.add_argument("--output", type=Path, required=True, help="Bundle path, for example ./run.tar.gz")
+    archive.add_argument(
+        "--no-media", dest="include_media", action="store_false",
+        help="Exclude images/, videos/, monitor_media/ and common image/video suffixes",
+    )
+    archive.add_argument(
+        "--no-traces", dest="include_traces", action="store_false",
+        help="Exclude provider trace/cache directories such as codex_responses/, claude_messages/ and telemetry/",
+    )
+    archive.add_argument("--force", action="store_true", help="Replace an existing output bundle")
     setup = subparsers.add_parser("setup", help="Prepare an isolated runtime and resources", allow_abbrev=False)
     target = setup.add_mutually_exclusive_group(required=True)
     target.add_argument("--integration")
@@ -190,6 +206,21 @@ def main(argv=None, *, _supervised=False) -> None:
     if args.command is None:
         parser.print_help()
         raise SystemExit(1)
+    if args.command == "archive":
+        from uni_robot_agent.artifacts.bundle import archive_run
+
+        try:
+            result = archive_run(
+                args.run_dir,
+                args.output,
+                include_media=args.include_media,
+                include_traces=args.include_traces,
+                force=args.force,
+            )
+        except (ValueError, OSError) as error:
+            parser.exit(1, f"{error}\n")
+        print(result.summary())
+        return
     if args.command == "monitor":
         from uni_robot_agent.ui.web.runtime import serve_directories
         try:
