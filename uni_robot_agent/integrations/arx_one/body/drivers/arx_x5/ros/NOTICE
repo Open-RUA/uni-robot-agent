@@ -1,0 +1,5 @@
+The packages under src/ are derived from the ARX X5 ROS2 sources at
+https://github.com/ARXroboticsX/ARX_X5 (revision c78328785ea23a81d908e1dcc551eca992f2f1e9),
+distributed under the BSD 3-Clause License in LICENSE. RUA changes are listed in
+../../UPSTREAM.md. The package.xml license tags state that repository license; maintainer
+entries are kept as published by the vendor.

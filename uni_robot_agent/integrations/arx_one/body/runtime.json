@@ -1,0 +1,20 @@
+{
+  "name": "rua-hardware-runtime",
+  "description": "ARX ONE Body runtime: X5 arms and D405 cameras",
+  "kits": [
+    "arx_x5",
+    "realsense"
+  ],
+  "dependency_tool": "drivers/dependencies.py",
+  "dependency_lock": "drivers/dependencies.lock.json",
+  "native_inputs": [
+    [
+      "drivers/dependencies.multiarch.lock.json",
+      "dependencies.multiarch.lock.json"
+    ],
+    [
+      "drivers/UPSTREAM.md",
+      "UPSTREAM.md"
+    ]
+  ]
+}

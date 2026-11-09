@@ -1,0 +1,56 @@
+site: robot_host
+hosts:
+  robot_host:
+    address: 127.0.0.1
+    description: Example Ubuntu hardware host
+bodies:
+  arms:
+    kind_family: arx_x5_normal
+    host: robot_host
+    body_id: arx_one_arms
+    port: 18092
+    token_env: RUA_BODY_TOKEN
+    description: ARX ONE arms (ARX X5, vendor normal controllers)
+  cams:
+    kind_family: realsense_d405
+    host: robot_host
+    body_id: arx_one_cams
+    port: 18093
+    token_env: RUA_BODY_TOKEN
+    description: ARX ONE cameras (three D405 via librealsense)
+robots:
+  arx_one:
+    description: 'ARX ONE: two ARX X5 arms with grippers, three D405 cameras (head,
+      left wrist, right wrist)'
+    arms:
+      left: arms/arx.left_arm
+      right: arms/arx.right_arm
+    cameras:
+      head:
+        device: cams/rs.head
+        mount: torso
+        frame_motion: fixed
+      left_wrist:
+        device: cams/rs.left_wrist
+        mount: arms/arx.left_arm.flange
+        frame_motion: articulated
+      right_wrist:
+        device: cams/rs.right_wrist
+        mount: arms/arx.right_arm.flange
+        frame_motion: articulated
+    geometry:
+      devices:
+        arms/arx.left_arm:
+          urdf: {status: unknown}
+          tcp: {status: unknown}
+          contact_geometry: {status: unknown}
+        arms/arx.right_arm:
+          urdf: {status: unknown}
+          tcp: {status: unknown}
+          contact_geometry: {status: unknown}
+actors: {}
+bindings: []
+perception: {}
+# Bind reviewed calibration artifacts explicitly; no laboratory record is selected.
+# See DEPLOYMENT.md (Site bindings) for the binding format.
+calibrations: {}

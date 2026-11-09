@@ -1,0 +1,7 @@
+{
+  "python": "/path/to/lingbot-depth-venv/bin/python",
+  "source": "/path/to/lingbot-depth-source",
+  "weights": "/path/to/lingbot-depth-weights.pt",
+  "device": "cuda",
+  "timeout_s": 120
+}

@@ -30,6 +30,7 @@ from uni_robot_agent.tools.gripper.contracts import (
     HoldRequest,
     MotionParameters,
     MoveRequest,
+    motion_profiles,
 )
 from uni_robot_agent.tools.gripper.pose import (
     pose_waypoint,
@@ -41,7 +42,7 @@ from uni_robot_agent.tools.gripper.pose import (
 )
 
 
-from uni_robot_agent.tools.gripper.opening import OpeningTracker
+from uni_robot_agent.tools.gripper.opening import opening_tracker
 
 
 class PoseTracker:
@@ -230,9 +231,9 @@ class MotionExecutor:
         targets = {target.arm: target for target in request.targets}
         participants = self._participants([target.arm for target in request.targets])
         start = state = self._state()
-        profile = request.parameters()
+        metadata = self.backend.description.metadata
+        profile = request.parameters(motion_profiles(metadata.get("motion_profiles")))
         trackers, openings = {}, {}
-        models = self.backend.description.metadata.get("gripper_opening_models", {})
         for name in participants:
             target, arm = targets[name], state.arms[name]
             trackers[name] = PoseTracker(
@@ -242,8 +243,8 @@ class MotionExecutor:
                 rotation_radius_m=self.arms[name].rotation_radius_m,
                 profile=profile,
             )
-            if target.gripper is not None and name in models:
-                openings[name] = OpeningTracker(target.gripper, models[name])
+            if target.gripper is not None and (tracker := opening_tracker(target.gripper, name, metadata)):
+                openings[name] = tracker
                 openings[name].update(arm)
         executed = 0
         reason, evidence = "max_steps", None
@@ -359,8 +360,9 @@ class MotionExecutor:
 
     def _stationary(self, steps: int, grippers: dict[str, float]) -> dict:
         start = state = self._state()
-        models = self.backend.description.metadata.get("gripper_opening_models", {})
-        openings = {name: OpeningTracker(value, models[name]) for name, value in grippers.items() if name in models}
+        metadata = self.backend.description.metadata
+        openings = {name: tracker for name, value in grippers.items()
+                    if (tracker := opening_tracker(value, name, metadata)) is not None}
         for name, opening in openings.items():
             opening.update(state.arms[name])
         executed = 0

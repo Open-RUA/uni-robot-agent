@@ -1,0 +1,11 @@
+{
+  "site": "standalone-fake",
+  "bodies": {
+    "demo": {
+      "body_id": "fake",
+      "driver": "uni_robot_agent.integrations.arx_one.body.drivers.fake.driver:driver",
+      "lease_ttl_s": 5.0
+    }
+  },
+  "robots": {"demo": {"devices": ["demo/left", "demo/right"]}}
+}

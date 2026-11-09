@@ -1,0 +1,9 @@
+# Typed transport for public InterfacesThread and InterfacesTools methods.
+# Operation names and exact vector ordering are documented in driver-parity.md.
+string operation
+float64[] values
+---
+bool success
+string message
+float64[] values
+int32[] error_codes

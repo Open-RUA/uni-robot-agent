@@ -7,7 +7,8 @@ tool programs that expand them into one or more ``StepRequest`` values.
 
 from __future__ import annotations
 
-from typing import Literal
+from collections.abc import Mapping
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -26,9 +27,9 @@ class MoveTarget(Contract):
 
 
 class MotionParameters(Contract):
-    max_step_m: FiniteFloat
-    position_tolerance_m: FiniteFloat
-    orientation_tolerance_rad: FiniteFloat
+    max_step_m: FiniteFloat = Field(gt=0)
+    position_tolerance_m: FiniteFloat = Field(gt=0)
+    orientation_tolerance_rad: FiniteFloat = Field(gt=0)
 
 
 MOTION_PROFILES: dict[str, MotionParameters] = {
@@ -38,6 +39,20 @@ MOTION_PROFILES: dict[str, MotionParameters] = {
 }
 
 
+def motion_profiles(overrides: Mapping[str, Any] | None = None) -> dict[str, MotionParameters]:
+    """The shared profiles with an environment's ``motion_profiles`` metadata applied.
+
+    An environment that knows its arm's accuracy replaces whole named profiles; the
+    profile names themselves stay fixed because they are part of the move schema.
+    """
+    if not overrides:
+        return dict(MOTION_PROFILES)
+    if unknown := set(overrides) - set(MOTION_PROFILES):
+        raise ValueError(f"Unknown motion profiles: {sorted(unknown)}")
+    return {**MOTION_PROFILES, **{name: MotionParameters.model_validate(values)
+                                  for name, values in overrides.items()}}
+
+
 class MoveRequest(Contract):
     targets: list[MoveTarget] = Field(min_length=1)
     profile: Profile = "standard"
@@ -45,8 +60,8 @@ class MoveRequest(Contract):
     position_tolerance_m: FiniteFloat | None = Field(default=None, ge=0.001, le=0.1)
     orientation_tolerance_rad: FiniteFloat | None = Field(default=None, ge=0.02, le=0.5)
 
-    def parameters(self) -> MotionParameters:
-        defaults = MOTION_PROFILES[self.profile]
+    def parameters(self, profiles: Mapping[str, MotionParameters] = MOTION_PROFILES) -> MotionParameters:
+        defaults = profiles[self.profile]
         return defaults.model_copy(update={key: getattr(self, key) for key in (
             "position_tolerance_m", "orientation_tolerance_rad"
         ) if getattr(self, key) is not None})

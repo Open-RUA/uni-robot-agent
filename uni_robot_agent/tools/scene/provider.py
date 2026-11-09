@@ -13,7 +13,9 @@ NAMES = ("view_env_state", "capture_scene", "locate")
 def tool_policies():
     return {
         "view_env_state": ToolExecutionPolicy(resource_key="episode", concurrency="parallel"),
-        "capture_scene": ToolExecutionPolicy(resource_key="episode", concurrency="exclusive"),
+        # A new snapshot is what a replan after a failed action starts from.
+        "capture_scene": ToolExecutionPolicy(resource_key="episode", concurrency="exclusive",
+                                             replan_observation=True),
         "locate": ToolExecutionPolicy(resource_key="perception", concurrency="parallel"),
     }
 

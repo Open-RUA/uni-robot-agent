@@ -52,7 +52,7 @@ print('Installed SDK:', uni_robot_agent.__file__)
     command([executable, '--help'])
     command([python, '-m', 'uni_robot_agent', '--version'])
     for integration in ('robodojo', 'robouse', 'robolab', 'robotwin', 'libero_plus',
-                        'libero_pro', 'rmbench', 'calvin'):
+                        'libero_pro', 'rmbench', 'calvin', 'arx_one'):
         command([python, '-m', 'uni_robot_agent', 'run', '--integration', integration,
                  '--model', 'validation-model', '--task', 'validation-task',
                  '--env-url', 'http://127.0.0.1:18760',

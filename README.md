@@ -156,11 +156,12 @@ for remote-host access and other options.
 
 | Platform | Public release status |
 |---|---|
-| **ARX One** | Coming soon |
+| **ARX ONE** | Available: dual ARX X5 arms and three RealSense D405 cameras behind a device process ([integration](uni_robot_agent/integrations/arx_one/README.md), [deployment](uni_robot_agent/integrations/arx_one/DEPLOYMENT.md)) |
 | **Franka** | Coming soon |
 
-Real-robot integrations and deployment guides are coming soon. The public
-package does not yet include a supported physical-robot connection workflow.
+The ARX ONE integration is also a template for connecting another real robot: its Body
+framework and host tooling are robot-independent, and each device kind plugs in as a driver
+with a host kit.
 
 <a id="how-it-works"></a>
 

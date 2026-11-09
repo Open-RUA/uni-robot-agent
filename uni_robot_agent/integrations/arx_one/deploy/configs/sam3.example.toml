@@ -1,0 +1,5 @@
+# Shared SAM 3 service (deploy/scripts/run_sam.sh). The PyPI sam3 wheel does not install its
+# tokenizer: copy bpe_simple_vocab_16e6.txt.gz to site-packages/assets/ in the service environment.
+backend = "sam3"
+checkpoint = "/path/to/sam3/sam3.pt"
+cuda_device = 0

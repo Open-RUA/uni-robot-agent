@@ -1,0 +1,16 @@
+{
+  "sdk_version": "2.58.4",
+  "sdk_revision": "34d6c778e1134d8505adcd56bb57acbe7598a459",
+  "source_origin": "Upstream librealsense 2.58.4 at sdk_revision; baseline_sha256 is the upstream file. The fixed file adds the clock-epoch shift of the last request time and clamps interpolation to [0, 1].",
+  "files": {
+    "src/global_timestamp_reader.cpp": {
+      "baseline_sha256": "78368c199d8f65c1dc78a8a2855513ab403818a5d652c7fdd807a28d7eba5b36",
+      "fixed_sha256": "d1f913b885c79d69f7e3d65673f23b630a74e03c2e734ee2e4d3ee6d8e41e558"
+    },
+    "src/global_timestamp_reader.h": {
+      "baseline_sha256": "336ed77131e16cd652bec9e301b43190230754fd5b1b619e47e3a2225276738d",
+      "fixed_sha256": "336ed77131e16cd652bec9e301b43190230754fd5b1b619e47e3a2225276738d"
+    }
+  },
+  "deployment_status": "The AMD64 SDK artifact in dependencies.lock.json is built from this source; record new hashes when you build your own (DEPLOYMENT.md section 2.2)."
+}

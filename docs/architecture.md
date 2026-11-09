@@ -227,7 +227,49 @@ and placement (`exclusive` or `parallel`). Exclusive jobs enter a FIFO resource
 queue in submission order. A background reply may acknowledge enqueueing,
 rather than completed motion. Use `wait_for_tool`, `wait_for_tools` or
 `get_tool_result` to inspect completion. Cancelling queued work does not
-interrupt a running physical action.
+interrupt a running physical action; `cancel_tool` and `flush_queue` return a
+receipt for each cancelled job.
+
+### Replan after failure
+
+A policy can opt a resource into replanning after a failed physical action. It
+is off unless declared, and environments that declare nothing keep the
+scheduling above. The model queues `move` (to above the cup), `move` (down) and
+`grasp`, and the first move stops halfway:
+
+| | Without the policy | With `replan_on_failure` |
+|---|---|---|
+| Queued `move` and `grasp` | Run from a pose the plan did not expect | Cancelled before dispatch, each with a receipt (`replan_after_failure`) |
+| A new action | Accepted | Refused with `replan_required` and the next step |
+| Ending the episode | Allowed | Allowed (`ends_episode`) |
+
+The resource accepts world-mutating work again once three things hold: the
+failed result has been read, the environment confirmed that the actuators
+stopped, and a `replan_observation` tool (scene `capture_scene`, on any
+resource) that started after both returned a new `snapshot_id`. With unknown execution or an
+unconfirmed stop it stays refused for the episode; recovery belongs to the
+operator. Nothing is retried or replayed.
+
+| Policy field | Meaning |
+|---|---|
+| `require_result_read` | In background mode, a call to a tool with this flag is refused while the last such call on its resource is unread |
+| `replan_on_failure` | An incomplete result cancels queued world-mutating work and requires a replan |
+| `replan_observation` | A successful result with a new `snapshot_id` can clear the requirement |
+| `ends_episode` | Stays allowed while a replan is required |
+
+Tools report what an action did in `ToolOutput.action` (`ActionOutcome`:
+`complete`, `executed` = `none`/`some`/`unknown`, `stopped`), which is never
+sent to the model. A failed result without it counts as unknown execution
+unless it carries `no_execution: true`. Gripper tools fill it from motion
+feedback, and count a program that failed after acknowledged steps as executed;
+a stepped simulation counts as stopped after a known result, while a device
+environment, or one that declares `physical_hardware`, must confirm the stop
+itself. Admission applies to `call` and
+`submit` alike.
+
+Without these policies scheduling is unchanged. Job controls change for every
+environment: `flush_queue` also lists each cancelled job, and a cancelled job's
+result carries `no_execution`, `execution_status` and `reason`.
 
 Coordinated arm targets are a separate per-tool capability; see
 [RoboDojo](integrations.md#coordinated-arm-targets).

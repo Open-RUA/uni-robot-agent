@@ -17,7 +17,11 @@ EXCLUDED_INTEGRATIONS = {'robodojo_internal', 'efe', 'franka_robotiq',
 ROOT_FILES = ('README.md', 'CHANGELOG.md', 'CONTRIBUTING.md', 'AGENTS.md',
               'CLAUDE.md', 'LICENSE', 'MANIFEST.in', 'pyproject.toml', 'pyrightconfig.json')
 SOURCE_SUFFIXES = {'.py', '.md', '.toml', '.json', '.sh', '.txt', '.png', '.pdf',
-                   '.html', '.css', '.js', '.ts', '.urdf', '.npz', '.npy', '.typed', '.yml'}
+                   '.html', '.css', '.js', '.ts', '.urdf', '.npz', '.npy', '.typed', '.yml',
+                   # Native driver sources an integration builds on the robot host (C++, ROS 2).
+                   '.yaml', '.cpp', '.hpp', '.h', '.msg', '.srv', '.xml'}
+# Files without a suffix that travel with vendored native sources.
+SOURCE_NAMES = {'UPSTREAM_LICENSE', 'LICENSE', 'NOTICE', 'SHA256SUMS'}
 
 
 def public_files(root: Path) -> dict[str, bytes]:
@@ -26,7 +30,7 @@ def public_files(root: Path) -> dict[str, bytes]:
         for path in sorted((root / directory).rglob('*')):
             if not path.is_file() or '__pycache__' in path.parts:
                 continue
-            if path.suffix in SOURCE_SUFFIXES or path.name == 'UPSTREAM_LICENSE':
+            if path.suffix in SOURCE_SUFFIXES or path.name in SOURCE_NAMES:
                 files[path.relative_to(root).as_posix()] = path.read_bytes()
     return files
 

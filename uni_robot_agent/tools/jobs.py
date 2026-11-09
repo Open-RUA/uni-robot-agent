@@ -52,7 +52,8 @@ class JobTools(ToolProvider):
 
     provider_id = "jobs"
 
-    def __init__(self, registry: JobRegistry, scheduler: ResourceScheduler) -> None:
+    def __init__(self, registry: JobRegistry, scheduler: ResourceScheduler, *, on_result_read=None) -> None:
+        self._on_result_read = on_result_read
         self._registry = registry
         self._scheduler = scheduler
         tools = bind_tools(
@@ -166,6 +167,8 @@ class JobTools(ToolProvider):
         if job is None:
             return self._missing_job(job_id)
         cancelled = self._scheduler.cancel(job_id)
+        if cancelled and self._on_result_read is not None:
+            self._on_result_read(job)
         return self._completed(ToolOutput(
             success=cancelled,
             error=None if cancelled else f"Job is already {job.status}",
@@ -181,10 +184,13 @@ class JobTools(ToolProvider):
         )
 
     def flush_queue(self, resource: str) -> ExecutionResult:
-        cancelled = self._scheduler.flush(resource)
+        cancelled_jobs = self._scheduler.cancel_pending(resource, None, reason="explicit_queue_flush")
+        for job in cancelled_jobs:
+            if self._on_result_read is not None:
+                self._on_result_read(job)
         return self._completed(ToolOutput(extra={
-            "resource": resource,
-            "cancelled": cancelled,
+            "resource": resource, "cancelled": len(cancelled_jobs),
+            "cancelled_jobs": [dict(job.summary(), **job.cancellation) for job in cancelled_jobs],
         }))
 
     def result_for(
@@ -218,6 +224,7 @@ class JobTools(ToolProvider):
                         "job_id": job.job_id,
                     },
                     images=output.images,
+                    action=output.action,
                 )
         else:
             extra = (
@@ -227,8 +234,10 @@ class JobTools(ToolProvider):
             output = ToolOutput(
                 success=False,
                 error=job.error or f"Job {job.status}",
-                extra=extra,
+                extra={**extra, **job.cancellation},
             )
+        if self._on_result_read is not None:
+            self._on_result_read(job)
         return self._completed(output)
 
     def _missing_job(self, job_id: str | None) -> ExecutionResult:

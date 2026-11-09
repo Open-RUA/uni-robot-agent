@@ -262,7 +262,10 @@ see [service extension examples](services.md).
 For scheduling changes, extend `execution/` against declared tool policies and
 test resource ownership, cancellation and job completion. Tools declare what
 resources they need; the executor decides when work can run. Service/native
-layers still enforce their own execution and lifecycle constraints.
+layers still enforce their own execution and lifecycle constraints. A physical
+tool family that opts into [replan after failure](architecture.md#replan-after-failure)
+reports `ToolOutput.action` from its own feedback, so the executor never reads
+tool-specific result fields or tool names.
 
 For observation/context work, distinguish obtaining observations from choosing
 what context the model sees. Observation providers own sampling; the observation

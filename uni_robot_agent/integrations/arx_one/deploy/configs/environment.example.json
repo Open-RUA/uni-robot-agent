@@ -1,0 +1,87 @@
+{
+  "robot_id": "arx_one",
+  "execute": false,
+  "arms_body": {
+    "url": "http://127.0.0.1:18092",
+    "token_env": "ARX_ONE_ARMS_TOKEN",
+    "body_id": "arx_one_arms"
+  },
+  "cameras_body": {
+    "url": "http://127.0.0.1:18093",
+    "token_env": "ARX_ONE_CAMERAS_TOKEN",
+    "body_id": "arx_one_cams"
+  },
+  "arms": {
+    "left": {
+      "device_id": "arx.left_arm",
+      "expected_metadata": {
+        "identity": null
+      },
+      "T_world_from_controller": null,
+      "joint_names": [],
+      "joint_lower": [],
+      "joint_upper": [],
+      "tracking_tolerance_rad": null,
+      "kinematics": null,
+      "grasp_site": "REPLACE_WITH_COMMISSIONED_GRASP_SITE",
+      "grasp_site_description": "REPLACE_WITH_VERIFIED_SITE_MEANING_AND_LOCAL_AXES",
+      "T_native_from_grasp": null,
+      "rotation_radius_m": null
+    },
+    "right": {
+      "device_id": "arx.right_arm",
+      "expected_metadata": {
+        "identity": null
+      },
+      "T_world_from_controller": null,
+      "joint_names": [],
+      "joint_lower": [],
+      "joint_upper": [],
+      "tracking_tolerance_rad": null,
+      "kinematics": null,
+      "grasp_site": "REPLACE_WITH_COMMISSIONED_GRASP_SITE",
+      "grasp_site_description": "REPLACE_WITH_VERIFIED_SITE_MEANING_AND_LOCAL_AXES",
+      "T_native_from_grasp": null,
+      "rotation_radius_m": null
+    }
+  },
+  "cameras": {
+    "head": {
+      "device_id": "rs.head",
+      "expected_metadata": {"identity": null},
+      "parent": "world",
+      "T_parent_from_optical": null
+    },
+    "left_wrist": {
+      "device_id": "rs.left_wrist",
+      "expected_metadata": {"identity": null},
+      "parent": "left",
+      "T_parent_from_optical": null
+    },
+    "right_wrist": {
+      "device_id": "rs.right_wrist",
+      "expected_metadata": {"identity": null},
+      "parent": "right",
+      "T_parent_from_optical": null
+    }
+  },
+  "control_frequency_hz": 10.0,
+  "max_episode_steps": 2000,
+  "motion_profiles": {
+    "standard": {
+      "max_step_m": 0.06,
+      "position_tolerance_m": 0.03,
+      "orientation_tolerance_rad": 0.3
+    },
+    "approach": {
+      "max_step_m": 0.04,
+      "position_tolerance_m": 0.02,
+      "orientation_tolerance_rad": 0.2
+    },
+    "precision": {
+      "max_step_m": 0.02,
+      "position_tolerance_m": 0.01,
+      "orientation_tolerance_rad": 0.1
+    }
+  }
+}

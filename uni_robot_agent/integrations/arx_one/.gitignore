@@ -1,0 +1,7 @@
+# Third-party binaries and site calibration are supplied per deployment; see DEPLOYMENT.md.
+/body/drivers/*/sdk/
+/body/drivers/can/
+/body/drivers/third_party/
+/deploy/configs/calibration/*/
+# X5 meshes come from arx5-sdk; see body/drivers/arx_x5/models/arx_x5_2025/README.md.
+/body/drivers/arx_x5/models/arx_x5_2025/meshes/

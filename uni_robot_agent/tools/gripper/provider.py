@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from uni_robot_agent.context.prompt import PromptContribution
 from uni_robot_agent.execution.scheduler import ToolExecutionPolicy
-from uni_robot_agent.services.environment.contracts import RequestRejected
-from uni_robot_agent.tools.toolkit import ToolOutput, ToolProvider, ToolSpec, bind_tools, schema
-from uni_robot_agent.tools.gripper.contracts import MOTION_PROFILES, GripperRequest, HoldRequest, MoveRequest
-from uni_robot_agent.tools.gripper.opening import native_opening
+from uni_robot_agent.services.environment.contracts import EpisodeInfo, RequestRejected
+from uni_robot_agent.tools.toolkit import ActionOutcome, ToolOutput, ToolProvider, ToolSpec, bind_tools, schema
+from uni_robot_agent.tools.gripper.contracts import MOTION_PROFILES, GripperRequest, HoldRequest, MoveRequest, motion_profiles
+from uni_robot_agent.tools.gripper.opening import native_opening, normalized_opening_tolerance
 from uni_robot_agent.tools.gripper.motion import ClientPrimitiveBackend, MotionExecutor
 from uni_robot_agent.tools.presentation import round_physical, state_for_model
 from uni_robot_agent.tools.scene.perception import snapshot_images, snapshot_metadata
@@ -15,6 +15,11 @@ POSE6 = {"type": "array", "items": {"type": "number"}, "minItems": 6, "maxItems"
          "description": "Absolute world grasp-site [x,y,z,roll,pitch,yaw]; metres and fixed-axis XYZ radians, R=Rz(yaw)@Ry(pitch)@Rx(roll)."}
 OPENING = {"type": "number", "minimum": 0, "maximum": 1, "description": "Normalized opening: 0=closed, 1=open."}
 NAMES = ("move", "grasp", "release", "hold")
+# Motion stops after which the requested action did not finish as planned.
+INCOMPLETE_STOPS = frozenset({"planning_rejected", "unsafe_motion", "tracking_interrupted", "native_end",
+                              # Action-model runs (actor_act) that ended before their decided steps.
+                              "partial_execution", "failure", "native_terminal", "error"})
+
 
 
 def tool_policies():
@@ -22,8 +27,14 @@ def tool_policies():
             concurrency="exclusive", mutates_world=True) for name in NAMES}
 
 
-def tool_specs(arms, *, opening_models=None):
+def tool_specs(arms, *, opening_models=None, profiles=MOTION_PROFILES, normalized_opening_tolerance=None):
     opening_models = opening_models or {}
+    # Without a metric model, a declared tolerance checks the measured 0-1 opening instead.
+    tracking = ("A calibrated explicit opening is tracked within the same max_steps budget;"
+                if opening_models or normalized_opening_tolerance is None else
+                f"An explicit opening is checked against the measured 0-1 opening within "
+                f"{normalized_opening_tolerance:g} (opening_basis=measured_normalized_opening), within the same "
+                "max_steps budget; a reading the environment does not mark as measured stays unknown;")
     if opening_models and set(opening_models) != set(arms):
         raise ValueError("Opening calibration must cover all tool arms")
     opening_key = "gripper_opening_m" if opening_models else "gripper"
@@ -42,12 +53,12 @@ def tool_specs(arms, *, opening_models=None):
     orientation_tolerance = {"type": "number", "minimum": .02, "maximum": .5}
     profiles = "; ".join(
         f"{name}: {limits.max_step_m:g}m increments/{limits.position_tolerance_m:g}m position/{limits.orientation_tolerance_rad:g}rad orientation tolerance"
-        for name, limits in MOTION_PROFILES.items()
+        for name, limits in profiles.items()
     )
     specs = [
         ToolSpec("move",
             "Move coordinated arms to absolute world grasp-site poses [x,y,z,roll,pitch,yaw], in metres and fixed-axis XYZ radians (R=Rz(yaw)@Ry(pitch)@Rx(roll)). All six values are required; both position and orientation are checked against the original goal and its tolerances. Copy the measured orientation to translate without reorienting, or the measured position to rotate in place. Omitted gripper preserves the previous command; a supplied opening applies during motion, not after arrival. "
-            f"Profiles: {profiles}. Profiles add no offset. Tolerances define final arrival around the original goal. On supported backends, a rejected waypoint may trigger one search for a temporary execution goal within 80% of those tolerances. Native waypoint IK remains strict; arrival still uses measured error from the original goal. There is no automatic return to the exact center or coarse-to-fine phase. Inspect goal_recovery and per-arm execution_target_position/execution_target_quaternion when recovery occurs. Position and orientation interpolate together; one goal does not express 'move then rotate'. Use separate calls and inspect completed feedback before dependent actions. Rotation consumes displacement budget. These are target bounds, not collision guarantees. Unlisted arms hold; target list order is not a sequence. Inspect feedback.pose_reached, targets_reached, per-arm opening_reached, steps_executed and stop_reason. A calibrated explicit opening is tracked within the same max_steps budget; after pose arrival the arm holds while the opening continues. opening_stalled/opening_unavailable are not target completion or contact evidence. Omitted opening retains the complete drive intent without requiring a held object to close to zero. Pose arrival is not object contact. Returns state, feedback, snapshot_id and final RGB images from the first scene camera and participating arms' wrists when available.",
+            f"Profiles: {profiles}. Profiles add no offset. Tolerances define final arrival around the original goal. On supported backends, a rejected waypoint may trigger one search for a temporary execution goal within 80% of those tolerances. Native waypoint IK remains strict; arrival still uses measured error from the original goal. There is no automatic return to the exact center or coarse-to-fine phase. Inspect goal_recovery and per-arm execution_target_position/execution_target_quaternion when recovery occurs. Position and orientation interpolate together; one goal does not express 'move then rotate'. Use separate calls and inspect completed feedback before dependent actions. Rotation consumes displacement budget. These are target bounds, not collision guarantees. Unlisted arms hold; target list order is not a sequence. Inspect feedback.pose_reached, targets_reached, per-arm opening_reached, steps_executed and stop_reason. {tracking} after pose arrival the arm holds while the opening continues. opening_stalled/opening_unavailable are not target completion or contact evidence. Omitted opening retains the complete drive intent without requiring a held object to close to zero. Pose arrival is not object contact. Returns state, feedback, snapshot_id and final RGB images from the first scene camera and participating arms' wrists when available.",
             schema({"profile": {"type": "string", "enum": list(MOTION_PROFILES), "default": "standard"},
                     "targets": targets({"pose": POSE6, opening_key: opening}, ("pose",)),
                     "max_steps": budget, "position_tolerance_m": position_tolerance,
@@ -105,13 +116,46 @@ class GripperTools(ToolProvider):
         return self._bind_tools()
 
     def _bind_tools(self):
+        metadata = self.episode.description.environment.metadata
         specs = tool_specs([arm.name for arm in self.episode.description.environment.arms],
-                           opening_models=self.opening_models)
+                           opening_models=self.opening_models,
+                           profiles=motion_profiles(metadata.get("motion_profiles")),
+                           normalized_opening_tolerance=normalized_opening_tolerance(metadata))
         return bind_tools([spec for spec in specs if spec.name in self.names], provider_id=self.provider_id,
                           handlers={name: getattr(self, name) for name in self.names}, invoke=self.invoke)
 
     def invoke(self, handler, **arguments):
-        return self.episode.invoke(handler, **arguments)
+        before = self.episode.state.state_version
+        output = self.episode.invoke(handler, **arguments)
+        if output.action is None and not output.success:
+            # A program that failed after acknowledged steps did move, whatever its error says.
+            uncertain = output.extra.get("execution_uncertain") is True
+            if uncertain or self.episode.state.state_version != before:
+                executed = "unknown" if uncertain else "some"
+                output.action = ActionOutcome(complete=False, executed=executed, stopped=self._stopped(executed))
+        return output
+
+    def _stopped(self, executed):
+        # A stepped simulation does not advance between requests, so a known result leaves it at rest.
+        # Physical and device environments must confirm the stop themselves.
+        description = self.episode.description
+        simulated = (isinstance(description, EpisodeInfo)
+                     and not description.environment.metadata.get("physical_hardware"))
+        return True if simulated and executed != "unknown" else None
+
+    def action_outcome(self, feedback, *, uncertain=False) -> ActionOutcome:
+        """What the action did, for the executor's replan handling (ToolExecutionPolicy.replan_on_failure)."""
+        reason = feedback.get("stop_reason")
+        # unsafe_motion is detected on an accepted step: the world moved even when no step was counted.
+        executed = ("unknown" if uncertain else "some" if reason == "unsafe_motion"
+                    else "none" if feedback.get("no_execution") else "some")
+        # A release or explicit opening that missed its target is incomplete; a grasp that stops
+        # closing on an object is not.
+        missed_opening = feedback.get("action") != "grasp" and any(
+            arm.get("opening_reached") is False for arm in (feedback.get("arms") or {}).values())
+        complete = (not uncertain and feedback.get("targets_reached") is not False
+                    and reason not in INCOMPLETE_STOPS and not missed_opening)
+        return ActionOutcome(complete=complete, executed=executed, stopped=self._stopped(executed))
 
     def action_output(self, reply, *, cameras=None):
         self.episode.publish(reply)
@@ -134,7 +178,8 @@ class GripperTools(ToolProvider):
             "remaining_steps": self.episode.remaining_steps, "feedback": round_physical(reply.feedback),
             **({"artifact_error": error} if (error := reply.artifact_error or image_error) else {}),
             "snapshot_id": None if snapshot is None else snapshot["snapshot_id"],
-            **image_metadata, "image_cameras": [image.name for image in images]}, images=images)
+            **image_metadata, "image_cameras": [image.name for image in images]}, images=images,
+            action=self.action_outcome(reply.feedback))
 
     def _run_motion_program(self, request, method, *, cameras=None, opening_feedback=None):
         """Run a model-level action by composing primitive service requests.

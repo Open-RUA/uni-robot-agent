@@ -27,6 +27,16 @@ class ToolExecutionPolicy:
     concurrency: Literal["exclusive", "parallel"] = "parallel"
     # Optional extensions use this to advance world versions; scheduling ignores it.
     mutates_world: bool = False
+    # Background mode: a new call on this resource is refused until this tool's last
+    # result has been read with wait_for_tool or get_tool_result.
+    require_result_read: bool = False
+    # An incomplete result (ToolOutput.action) cancels queued world-mutating work on
+    # the resource and refuses new work until the model replans; see execution/replan.py.
+    replan_on_failure: bool = False
+    # A successful result of this tool is a new observation that a replan can start from.
+    replan_observation: bool = False
+    # Ending the episode stays allowed while a replan is required.
+    ends_episode: bool = False
 
 
 @dataclass
@@ -44,6 +54,7 @@ class JobRecord:
     result: Any = None
     error: str | None = None
     queue_position: int | None = None
+    cancellation: dict[str, Any] = field(default_factory=dict)
     done: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def summary(self) -> dict[str, Any]:
@@ -128,12 +139,14 @@ class JobRegistry:
             job.finished_at = time.time()
             job.done.set()
 
-    def cancel_if_queued(self, job_id: str) -> bool:
+    def cancel_if_queued(self, job_id: str, *, reason: str = "cancelled_by_request") -> bool:
         with self._lock:
             job = self._jobs[job_id]
             if job.status != "queued":
                 return False
             job.status = "cancelled"
+            job.cancellation = {"no_execution": True, "execution_status": "cancelled_before_dispatch", "reason": reason}
+            job.queue_position = None
             job.finished_at = time.time()
             job.done.set()
             return True
@@ -241,6 +254,22 @@ class ResourceScheduler:
         cancelled = self._registry.cancel_if_queued(job_id)
         if cancelled:
             self._notify()
+        return cancelled
+
+    def cancel_pending(self, resource_key: str, tool_names: set[str] | None, *, reason: str) -> list[JobRecord]:
+        """Cancel queued work (of the named tools, or all), keeping each receipt; running jobs are untouched."""
+        with self._lock:
+            cancelled = [job for job in self._registry.list(resource_key)
+                         if (tool_names is None or job.tool_name in tool_names)
+                         and self._registry.cancel_if_queued(job.job_id, reason=reason)]
+            queue = self._queues.get(resource_key)
+            if queue is not None:
+                ids = {job.job_id for job in cancelled}
+                retained = [(jid, fn) for jid, fn in queue if jid not in ids]
+                queue.clear()
+                queue.extend(retained)
+                self._refresh_positions(resource_key)
+        self._notify()
         return cancelled
 
     def flush(self, resource_key: str) -> int:

@@ -46,6 +46,8 @@ tui = []
 codex = []
 claude = []
 dev = ["build>=1", "twine>=6", "tomli-w>=1"]
+# OpenCV 5 removed calibrateHandEye, which the ARX ONE hand-eye solvers use.
+arx_one = ["scipy>=1.10", "opencv-python-headless>=4.8,<5", "pyyaml>=6"]
 robolab = ["scipy>=1.10", "trimesh>=4,<5", "python-fcl>=0.7,<0.8"]
 robodojo = [
     "trimesh>=4,<5",
@@ -82,9 +84,22 @@ namespaces = false
 "uni_robot_agent.integrations.dexjoco" = ["deployment.toml", "SOURCE.md"]
 "uni_robot_agent.integrations.robodojo" = ["deployment.toml", "SOURCE.md", "UPSTREAM_LICENSE", "environment/*.urdf"]
 
+# Native sources, ROS packages, models and templates travel with the integration. Local
+# third-party copies and measured calibration are ignored by Git and excluded below as well.
+"uni_robot_agent.integrations.arx_one" = [
+    "**/*.md", "**/*.json", "**/*.sh", "**/*.txt", "**/*.urdf", "**/*.toml", "**/*.yaml",
+    "**/*.cpp", "**/*.hpp", "**/*.h", "**/*.msg", "**/*.srv", "**/package.xml", "**/SHA256SUMS",
+    "**/LICENSE", "**/NOTICE",
+]
 "uni_robot_agent.integrations.robouse" = ["recipes/*.toml"]
 "uni_robot_agent.services.actor" = ["recipes/*.toml"]
 "uni_robot_agent.services.perception" = ["recipes/*.toml"]
+
+[tool.setuptools.exclude-package-data]
+"uni_robot_agent.integrations.arx_one" = [
+    "deploy/configs/calibration/*/**", "body/drivers/*/sdk/**", "body/drivers/can/**",
+    "body/drivers/third_party/**", "body/drivers/arx_x5/models/arx_x5_2025/meshes/**",
+]
 
 # Native services run in separate environments without planner/UI dependencies.
 [tool.uni-robot-agent.runtime]

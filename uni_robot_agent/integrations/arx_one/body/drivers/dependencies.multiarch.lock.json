@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "release_target": "linux-arm64",
+  "dependencies": {
+    "arx_x5": {
+      "repository": "https://github.com/ARXroboticsX/ARX_X5",
+      "revision": "c78328785ea23a81d908e1dcc551eca992f2f1e9",
+      "version": "2026-04-28",
+      "license": "BSD-3-Clause",
+      "license_source": "LICENSE at pinned revision",
+      "baseline": "Latest official ROS2 at audit date 2026-09-12. Required headers are unchanged; ARM64 command clipping changes J1 to [-2.618, 3.14]. J2-J6 and EEF bounds remain narrower than SDK V2 documentation. Controller and Body identities must match.",
+      "artifacts": [
+        {
+          "url": "https://raw.githubusercontent.com/ARXroboticsX/ARX_X5/c78328785ea23a81d908e1dcc551eca992f2f1e9/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/lib/arx_x5_src/include/arx_x5_src/interfaces/InterfacesThread.hpp",
+          "sha256": "22573f271a03666b9e97c1e9b606b150ee2b70a2e06065ee9d4d7eaf1a67ae2d",
+          "format": "file",
+          "destination": "arx/arx_x5_src/include/arx_x5_src/interfaces/InterfacesThread.hpp",
+          "target": "all"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/ARXroboticsX/ARX_X5/c78328785ea23a81d908e1dcc551eca992f2f1e9/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/lib/arx_x5_src/include/arx_x5_src/interfaces/InterfaceTools.hpp",
+          "sha256": "f0b89281f530b624437b6644bdec8643349f4e4509b1a8a25df480de96b5b2f4",
+          "format": "file",
+          "destination": "arx/arx_x5_src/include/arx_x5_src/interfaces/InterfaceTools.hpp",
+          "target": "all"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/ARXroboticsX/ARX_X5/c78328785ea23a81d908e1dcc551eca992f2f1e9/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/lib/arx_hardware_interface/include/arx_hardware_interface/typedef/HybridJointTypeDef.hpp",
+          "sha256": "83cd904a0dd8ed103a6544ea4e29c93a67d3a8da2f25e86f9aa988f4e486ae90",
+          "format": "file",
+          "destination": "arx/arx_hardware_interface/include/arx_hardware_interface/typedef/HybridJointTypeDef.hpp",
+          "target": "all"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/ARXroboticsX/ARX_X5/c78328785ea23a81d908e1dcc551eca992f2f1e9/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/lib/arx_x5_src/libarx_x5_src-arm64.so",
+          "sha256": "fb4e905d523f16d331b46089f942d5cff47f53a85acf774519dfa1d17909234a",
+          "format": "file",
+          "destination": "arx/arx_x5_src/libarx_x5_src-arm64.so",
+          "target": "linux-arm64",
+          "transform": "rua_arx_arm64_j4_90_v1",
+          "output_sha256": "3742728fa1ef56eef5eaf5b3a552e0b8e3c6944ba1cd1b937fdb88e9fddc2265"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/ARXroboticsX/ARX_X5/c78328785ea23a81d908e1dcc551eca992f2f1e9/ROS2/X5_ws/src/arx_x5_ros2/arx_x5_controller/lib/arx_x5_src/libarx_x5_src.so",
+          "sha256": "d07d53d14da17f0a1db2753e3339f9e4c055dad72df613c811b9692c4bede85c",
+          "format": "file",
+          "destination": "arx/arx_x5_src/libarx_x5_src.so",
+          "target": "linux-amd64"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/ARXroboticsX/ARX_X5/c78328785ea23a81d908e1dcc551eca992f2f1e9/LICENSE",
+          "sha256": "11b6d7cd3c80b5eda4974f4fde6c08ec4c142bd9cb66f1b854974c25dab9cf22",
+          "format": "file",
+          "destination": "arx/LICENSE",
+          "target": "all"
+        }
+      ],
+      "local_modification": {
+        "id": "rua_arx_arm64_j4_90_v1",
+        "description": "RUA variant: J4 bounds only, from +-1.29 rad to +-90 degrees. Official source artifact remains intact. Not a manufacturer release.",
+        "implementation": "native/dependencies.py:apply_arx_j4_90",
+        "original_j4_rad": [
+          -1.29,
+          1.29
+        ],
+        "modified_j4_deg": [
+          -90,
+          90
+        ],
+        "hardware_model": "X5 2025 type=2",
+        "unmodified_sdk_sha256": "fb4e905d523f16d331b46089f942d5cff47f53a85acf774519dfa1d17909234a"
+      }
+    },
+    "eigen": {
+      "repository": "https://gitlab.com/libeigen/eigen",
+      "revision": "3147391d946bb4b6c68edd901f2add6ac1f31f8c",
+      "version": "3.4.0",
+      "license": "MPL-2.0; retain all archive COPYING notices",
+      "license_source": "COPYING.* at pinned revision",
+      "artifacts": [
+        {
+          "url": "https://gitlab.com/libeigen/eigen/-/archive/3147391d946bb4b6c68edd901f2add6ac1f31f8c/eigen-3147391d946bb4b6c68edd901f2add6ac1f31f8c.tar.gz",
+          "sha256": "0c8c490764f9c2a793133491adca0cd073b73e0bde965c68cbe58d91b5ed4261",
+          "format": "tar",
+          "strip_prefix": "eigen-3147391d946bb4b6c68edd901f2add6ac1f31f8c",
+          "destination": "eigen",
+          "target": "all"
+        }
+      ]
+    },
+    "can_utils": {
+      "repository": "https://github.com/linux-can/can-utils",
+      "version": "2023.03-1 (Ubuntu noble package)",
+      "source_package": "https://ports.ubuntu.com/ubuntu-ports/pool/universe/c/can-utils/can-utils_2023.03-1.dsc",
+      "license": "slcand: GPL-2.0-or-later; other tools as package copyright",
+      "license_source": "usr/share/doc/can-utils/copyright in pinned .deb",
+      "compatibility": "slcand bytes match running binary; flags -o -f -c -s8 -F unchanged",
+      "installed_slcand_sha256": "1e6843dbc739c831aa3cda1bdaeef580925cffaa7ab3c250e8b5f265b5bdb8bd",
+      "artifacts": [
+        {
+          "url": "https://ports.ubuntu.com/ubuntu-ports/pool/universe/c/can-utils/can-utils_2023.03-1_arm64.deb",
+          "sha256": "68eab5329ceeef9be1b292b7fdfb9ae955061bf978b40a4c1be04b3e9a1e7e93",
+          "format": "deb",
+          "destination": "can-utils",
+          "target": "linux-arm64"
+        },
+        {
+          "url": "https://archive.ubuntu.com/ubuntu/pool/universe/c/can-utils/can-utils_2023.03-1_amd64.deb",
+          "sha256": "641716763d939d29464e86633141c68f6cb99ceca192759e482b3b990d197d30",
+          "format": "deb",
+          "destination": "can-utils",
+          "target": "linux-amd64"
+        }
+      ]
+    },
+    "librealsense": {
+      "repository": "https://github.com/realsenseai/librealsense",
+      "revision": "dfd6aa91250f5c31521d72d627865417989bb4e7",
+      "version": "2.58.3",
+      "license": "Apache-2.0",
+      "license_source": "LICENSE from the verified source build",
+      "build_options": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "FORCE_RSUSB_BACKEND": "ON",
+        "BUILD_SHARED_LIBS": "ON",
+        "BUILD_EXAMPLES": "OFF",
+        "BUILD_GRAPHICAL_EXAMPLES": "OFF",
+        "BUILD_TOOLS": "OFF",
+        "BUILD_PYTHON_BINDINGS": "OFF",
+        "BUILD_WITH_DDS": "OFF",
+        "BUILD_WITH_NEON": "ON",
+        "HWM_OVER_XU": "ON"
+      },
+      "artifact_origin": "Read-only export of the previously verified ARM64 GCC 13 RSUSB build; included in the offline hardware build inputs. No SDK binary upgrade. Rebuilding from source requires recording a new artifact hash and validation.",
+      "shared_library_sha256": "0d52295cfba3a0fe262d77432a0d42c7d527347b1f7206682190ca346b19dec5",
+      "artifacts": [
+        {
+          "url": null,
+          "import_name": "librealsense-sdk-arm64.tar.gz",
+          "sha256": "9899431028932b00a0d3bc8ce9455e41073381abdfa7b8247b5355174bc04ea5",
+          "format": "tar",
+          "destination": "realsense",
+          "target": "linux-arm64"
+        },
+        {
+          "url": null,
+          "import_name": "librealsense-sdk-amd64-clock-wrap-20261023.tar.gz",
+          "sha256": "770eee3b35ca44e3a59292689bfe769f45cae734c821351bee979f8b774baf4c",
+          "format": "tar",
+          "destination": "realsense",
+          "target": "linux-amd64",
+          "build_provenance": {
+            "host": "Ubuntu 24.04 AMD64",
+            "json_revision": "55f93686c01528224f448c19128836e7df245f72",
+            "build_options_override": {
+              "BUILD_WITH_NEON": "OFF",
+              "BUILD_GLSL_EXTENSIONS": "OFF",
+              "BUILD_ROSBAG2": "OFF",
+              "CHECK_FOR_UPDATES": "OFF",
+              "ENABLE_CCACHE": "OFF"
+            },
+            "hardware_validation": "Validated on the reference ARX ONE cameras; source timestamps remain SDK estimates.",
+            "sdk_revision": "34d6c778e1134d8505adcd56bb57acbe7598a459",
+            "clock_wrap_fix": {
+              "date": "2026-10-23",
+              "library_sha256": "58fc9a30c0f9d97771e00827696f19433ad8c6550df133d14d9b96194aba477d",
+              "source_manifest_sha256": "f7ff36d59edb3ccec3e64635b70132ce9064538b8620c39a79cdd7670fb121d6",
+              "offline_regression": "Linux source 95 tests, packaged Python 88 tests, linked-library clock soak and old-library negative control"
+            }
+          }
+        }
+      ],
+      "target_overrides": {
+        "linux-amd64": {
+          "version": "2.58.4",
+          "revision": "34d6c778e1134d8505adcd56bb57acbe7598a459",
+          "shared_library_sha256": "58fc9a30c0f9d97771e00827696f19433ad8c6550df133d14d9b96194aba477d",
+          "artifact_origin": "Ubuntu 24.04 AMD64 GCC 13 RSUSB clean source rebuild, clock wrap fix 2026-10-23; no firmware writes."
+        }
+      }
+    }
+  },
+  "release_targets": [
+    "linux-arm64",
+    "linux-amd64"
+  ],
+  "runtime_files": {
+    "linux-arm64": {
+      "can-utils/usr/bin/slcand": "1e6843dbc739c831aa3cda1bdaeef580925cffaa7ab3c250e8b5f265b5bdb8bd",
+      "realsense/lib/librealsense2.so.2.58.3": "0d52295cfba3a0fe262d77432a0d42c7d527347b1f7206682190ca346b19dec5"
+    },
+    "linux-amd64": {
+      "can-utils/usr/bin/slcand": "e81f7dbcacf678a291854ccd2868a56ee6c436f059a4be512aaca7f05ede5b4b",
+      "arx/arx_x5_src/libarx_x5_src.so": "d07d53d14da17f0a1db2753e3339f9e4c055dad72df613c811b9692c4bede85c",
+      "realsense/lib/librealsense2.so.2.58.4": "58fc9a30c0f9d97771e00827696f19433ad8c6550df133d14d9b96194aba477d"
+    }
+  }
+}

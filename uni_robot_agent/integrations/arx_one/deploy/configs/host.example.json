@@ -1,0 +1,90 @@
+{
+  "schema_version": 2,
+  "host_id": "robot_host",
+  "listen": "127.0.0.1",
+  "operator": "REPLACE_USER",
+  "state_dir": "/var/lib/rua",
+  "tokens": "/etc/rua/body-tokens.json",
+  "kits": {
+    "arx_x5": {
+      "ros_domain_id": 0,
+      "can": {
+        "left": {
+          "can_interface": "can1",
+          "device": "/dev/arxcan1",
+          "serial": "REPLACE_LEFT_USB_SERIAL",
+          "vendor_id": "16d0",
+          "product_id": "117e",
+          "arm_end_type": 2
+        },
+        "right": {
+          "can_interface": "can3",
+          "device": "/dev/arxcan3",
+          "serial": "REPLACE_RIGHT_USB_SERIAL",
+          "vendor_id": "16d0",
+          "product_id": "117e",
+          "arm_end_type": 2
+        }
+      }
+    },
+    "realsense": {}
+  },
+  "bodies": {
+    "arms": {
+      "kit": "arx_x5",
+      "body_id": "arx_one_arms",
+      "port": 18092,
+      "driver_args": {
+        "profile": "x5_2025_amd64_j4_90",
+        "arms": {
+          "arx.left_arm": {
+            "side": "left",
+            "can": "can1",
+            "can_key": "left",
+            "profile": "x5_2025_amd64_j4_90",
+            "controller": "/arx_one/left_controller",
+            "status_topic": "/arx_one/left/status",
+            "command_topic": "/arx_one/left/cmd",
+            "writer_node": "rua_arms"
+          },
+          "arx.right_arm": {
+            "side": "right",
+            "can": "can3",
+            "can_key": "right",
+            "profile": "x5_2025_amd64_j4_90",
+            "controller": "/arx_one/right_controller",
+            "status_topic": "/arx_one/right/status",
+            "command_topic": "/arx_one/right/cmd",
+            "writer_node": "rua_arms"
+          }
+        },
+        "publish_hz": 50.0,
+        "eef_limit_policy": "reject"
+      }
+    },
+    "cams": {
+      "kit": "realsense",
+      "body_id": "arx_one_cams",
+      "port": 18093,
+      "driver_args": {
+        "cameras": {
+          "rs.head": {
+            "serial": "REPLACE_RS_HEAD_SERIAL",
+            "sdk_serial": "REPLACE_RS_HEAD_SERIAL",
+            "role_hint": "head"
+          },
+          "rs.left_wrist": {
+            "serial": "REPLACE_RS_LEFT_WRIST_SERIAL",
+            "sdk_serial": "REPLACE_RS_LEFT_WRIST_SERIAL",
+            "role_hint": "left_wrist"
+          },
+          "rs.right_wrist": {
+            "serial": "REPLACE_RS_RIGHT_WRIST_SERIAL",
+            "sdk_serial": "REPLACE_RS_RIGHT_WRIST_SERIAL",
+            "role_hint": "right_wrist"
+          }
+        }
+      }
+    }
+  }
+}
