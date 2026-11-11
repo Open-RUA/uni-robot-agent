@@ -11,6 +11,7 @@ prune tests
 
 
 recursive-include uni_robot_agent/integrations *.toml
+recursive-include uni_robot_agent/integrations/piper_x *.md *.json
 recursive-include uni_robot_agent/integrations/arx_one *.md *.json *.sh *.txt *.urdf *.toml *.yaml *.cpp *.hpp *.h *.msg *.srv package.xml SHA256SUMS LICENSE NOTICE
 prune uni_robot_agent/integrations/arx_one/deploy/configs/calibration
 prune uni_robot_agent/integrations/arx_one/body/drivers/arx_x5/sdk

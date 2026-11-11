@@ -1,0 +1,77 @@
+{
+  "robot_id": "<ROBOT_ID>",
+  "arms_body": "arms",
+  "cameras_body": "cameras",
+  "arms": {
+    "arm_a": {
+      "device_id": "arm_a",
+      "binding": "arm_a_bus",
+      "role": "left",
+      "grasp_site": "arm_a/grasp",
+      "grasp_site_description": "<COMMISSIONED_TCP_AXES_AND_ORIGIN>"
+    },
+    "arm_b": {
+      "device_id": "arm_b",
+      "binding": "arm_b_bus",
+      "role": "right",
+      "grasp_site": "arm_b/grasp",
+      "grasp_site_description": "<COMMISSIONED_TCP_AXES_AND_ORIGIN>"
+    }
+  },
+  "cameras": {
+    "overview": {
+      "device_id": "overview",
+      "binding": "overview_sensor",
+      "role": "scene",
+      "parent_arm": null
+    },
+    "wrist_a": {
+      "device_id": "wrist_a",
+      "binding": "wrist_a_sensor",
+      "role": "wrist",
+      "parent_arm": "arm_a"
+    },
+    "wrist_b": {
+      "device_id": "wrist_b",
+      "binding": "wrist_b_sensor",
+      "role": "wrist",
+      "parent_arm": "arm_b"
+    }
+  },
+  "required_arm_roles": [
+    "left",
+    "right"
+  ],
+  "required_cameras": [
+    "overview",
+    "wrist_a",
+    "wrist_b"
+  ],
+  "calibration": {
+    "path": "calibration.json",
+    "sha256": "<SHA256>"
+  },
+  "motion_profiles": {
+    "standard": {
+      "max_step_m": null,
+      "position_tolerance_m": null,
+      "orientation_tolerance_rad": null
+    },
+    "approach": {
+      "max_step_m": null,
+      "position_tolerance_m": null,
+      "orientation_tolerance_rad": null
+    },
+    "precision": {
+      "max_step_m": null,
+      "position_tolerance_m": null,
+      "orientation_tolerance_rad": null
+    }
+  },
+  "action_timeout_s": null,
+  "stop_timeout_s": null,
+  "feedback_max_age_s": null,
+  "feedback_max_skew_s": null,
+  "control_frequency_hz": null,
+  "max_episode_steps": null
+}

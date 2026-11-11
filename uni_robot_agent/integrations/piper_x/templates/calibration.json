@@ -1,0 +1,110 @@
+{
+  "robot_id": "<ROBOT_ID>",
+  "host_id": "<HOST_ID>",
+  "model_sha256": "<CANONICAL_MODEL_SHA256>",
+  "bindings_sha256": "<CANONICAL_SELECTED_BINDINGS_SHA256>",
+  "collected_at": "<ISO8601_TIME>",
+  "operator": "<COMMISSIONING_OPERATOR>",
+  "world_frame": "<COMMISSIONED_WORLD_FRAME>",
+  "arms": {
+    "arm_a": {
+      "T_world_from_base": null,
+      "T_base_from_urdf": null,
+      "T_tip_from_flange": null,
+      "T_flange_from_grasp": null,
+      "joint_lower": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "joint_upper": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "motion_limits": {
+        "eef_step_m": null,
+        "eef_speed_m_s": null,
+        "eef_accel_m_s2": null,
+        "eef_rotation_step_rad": null,
+        "eef_rotation_speed_rad_s": null,
+        "joint_step_rad": null,
+        "joint_speed_rad_s": null,
+        "gripper_speed_fraction_s": null
+      },
+      "rotation_radius_m": null,
+      "tracking_tolerance_rad": null,
+      "gripper_closed_m": null,
+      "gripper_open_m": null,
+      "gripper_effort": null,
+      "gripper_tolerance_m": null
+    },
+    "arm_b": {
+      "T_world_from_base": null,
+      "T_base_from_urdf": null,
+      "T_tip_from_flange": null,
+      "T_flange_from_grasp": null,
+      "joint_lower": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "joint_upper": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "motion_limits": {
+        "eef_step_m": null,
+        "eef_speed_m_s": null,
+        "eef_accel_m_s2": null,
+        "eef_rotation_step_rad": null,
+        "eef_rotation_speed_rad_s": null,
+        "joint_step_rad": null,
+        "joint_speed_rad_s": null,
+        "gripper_speed_fraction_s": null
+      },
+      "rotation_radius_m": null,
+      "tracking_tolerance_rad": null,
+      "gripper_closed_m": null,
+      "gripper_open_m": null,
+      "gripper_effort": null,
+      "gripper_tolerance_m": null
+    }
+  },
+  "cameras": {
+    "overview": {
+      "parent_frame": "<COMMISSIONED_WORLD_FRAME>",
+      "optical_frame": "overview/color_optical",
+      "T_parent_from_optical": null,
+      "capture_sha256": "<CANONICAL_CAMERA_BINDING_SHA256>"
+    },
+    "wrist_a": {
+      "parent_frame": "arm_a/flange",
+      "optical_frame": "wrist_a/color_optical",
+      "T_parent_from_optical": null,
+      "capture_sha256": "<CANONICAL_CAMERA_BINDING_SHA256>"
+    },
+    "wrist_b": {
+      "parent_frame": "arm_b/flange",
+      "optical_frame": "wrist_b/color_optical",
+      "T_parent_from_optical": null,
+      "capture_sha256": "<CANONICAL_CAMERA_BINDING_SHA256>"
+    }
+  },
+  "table_height_m": null,
+  "collision_margin_m": null,
+  "accepted_checks": []
+}

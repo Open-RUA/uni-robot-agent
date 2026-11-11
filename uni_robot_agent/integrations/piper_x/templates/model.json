@@ -1,0 +1,54 @@
+{
+  "model_id": "<HARDWARE_REVISION>",
+  "protocol": "piper-x-can-v1",
+  "sdk_version": "<PINNED_PYAGXARM_VERSION>",
+  "sdk_driver_sha256": "<SHA256_OF_MOVE_J_IMPLEMENTATION>",
+  "firmware_profile": "<default_OR_V183_OR_V188_OR_V189>",
+  "firmware_version": "<MEASURED_FIRMWARE_SOFTWARE_VERSION>",
+  "urdf": {
+    "path": "assets/robot.urdf",
+    "sha256": "<SHA256>"
+  },
+  "collision": {
+    "path": "assets/collision.json",
+    "sha256": "<SHA256>"
+  },
+  "root_link": "<URDF_ROOT>",
+  "tip_link": "<URDF_FLANGE_LINK>",
+  "joint_names": [
+    "<JOINT_1>",
+    "<JOINT_2>",
+    "<JOINT_3>",
+    "<JOINT_4>",
+    "<JOINT_5>",
+    "<JOINT_6>"
+  ],
+  "joint_lower": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "joint_upper": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "motion_limits": {
+    "eef_step_m": null,
+    "eef_speed_m_s": null,
+    "eef_accel_m_s2": null,
+    "eef_rotation_step_rad": null,
+    "eef_rotation_speed_rad_s": null,
+    "joint_step_rad": null,
+    "joint_speed_rad_s": null,
+    "gripper_speed_fraction_s": null
+  },
+  "gripper_max_opening_m": null,
+  "gripper_max_effort_n": null
+}
