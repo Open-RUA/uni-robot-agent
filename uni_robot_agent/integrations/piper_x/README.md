@@ -72,6 +72,11 @@ Scene names are retained. Shared tools can then select the acting arm's wrist
 views while the adapter preserves device identities and parent-frame calibration.
 Arm names must not be substrings of each other; ambiguous names are rejected.
 
+RGB-D packets with exactly zero Brown or inverse-Brown distortion coefficients
+already have pinhole geometry. The observation adapter preserves their pixels
+directly without allocating identity rectification maps. Nonzero distortion
+and all source-time freshness checks retain their normal processing.
+
 Validate and generate host configuration without hardware access:
 
 ```bash

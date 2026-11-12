@@ -33,6 +33,10 @@ def rectify(rgb, depth, intrinsics):
         if np.any(coeffs):
             raise ValueError("Pinhole model has nonzero distortion")
         return rgb, depth, k
+    if model in {"brown_conrady", "inverse_brown_conrady"} and not np.any(coeffs):
+        # Zero distortion is exactly pinhole geometry, including for SDK Brown
+        # labels. Avoid allocating full-resolution maps for an identity remap.
+        return rgb, depth, k
     import cv2
     h, w = depth.shape
     mx, my = _rectification_maps(h, w, k, coeffs, model)
