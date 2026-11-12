@@ -21,7 +21,7 @@ from ..config import Installation
 from .identity import verify_can
 from .planning import RobotGeometry
 from .transport import PassiveCan, SdkWriter
-from uni_robot_agent.integrations.piper_x.environment.kinematics import distance, from_eef, bounded_target
+from uni_robot_agent.integrations.piper_x.environment.kinematics import Kinematics, distance, from_eef, bounded_target
 
 
 class ArmBody:
@@ -54,6 +54,9 @@ class ArmBody:
             locks = ResourceLocks(resources, self.installation.host.lock_dir)
             self._cleanup.callback(locks.close)
             self.geometry = RobotGeometry(self.installation) if execute else None
+            environment = self.installation.environment()
+            self._kinematics = {name: Kinematics(environment.arms[name]) for name, calibration
+                                in self.installation.calibration.arms.items() if any(calibration.kinematic_joint_offsets_rad)}
             for name, arm in self.robot.arms.items():
                 reader = PassiveCan(self.installation.host.arms[arm.binding].interface,
                     max_age_s=self.robot.feedback_max_age_s, max_skew_s=self.robot.feedback_max_skew_s)
@@ -107,7 +110,7 @@ class ArmBody:
             c = self.installation.calibration.arms[name]
             devices.append(DeviceManifest(arm.device_id, "arm", hardware_profile="piper_x",
                 frames=[f"{arm.device_id}/base", f"{arm.device_id}/flange"],
-                signals={n: Signal(n) for n in ("joint_position_rad", "eef_position_m", "eef_rpy_rad", "gripper_opening", "gripper_opening_measured",
+                signals={n: Signal(n) for n in ("joint_position_rad", "eef_position_m", "eef_rpy_rad", "native_eef_position_m", "native_eef_rpy_rad", "gripper_opening", "gripper_opening_measured",
                     "controller_motion_status_code", "controller_target_reached")},
                 observation_streams={"state": ObservationStreamSpec(["joint_position_rad"])},
                 procedures={
@@ -119,6 +122,8 @@ class ArmBody:
                     "joint_limits_rad": {"lower": c.joint_lower, "upper": c.joint_upper},
                     "motion_limits": c.motion_limits.model_dump(), "eef_coordinates": coordinate_metadata(arm.device_id),
                     "tracking_limits": self.tracking_limits.to_dict(),
+                    "kinematic_joint_offsets_rad": c.kinematic_joint_offsets_rad,
+                    "eef_pose_source": "native feedback with calibrated kinematic correction" if any(c.kinematic_joint_offsets_rad) else "native feedback",
                     "model_sha256": self.installation.model.urdf.sha256, "motion_enabled": self.execute},
                 limitations=["Host CAN receive timestamps; no controller hardware clock", "Software stop is not a certified E-stop",
                     *(["Collision checks cover the URDF only; omitted tooling requires operator supervision"]
@@ -133,8 +138,14 @@ class ArmBody:
         if width is None or not c.gripper_closed_m - .001 <= width <= c.gripper_open_m + .001:
             raise DeviceError(ErrorCode.OBSERVATION_STALE, "Gripper mode or calibration mismatch")
         opening = float(np.clip((width - c.gripper_closed_m) / (c.gripper_open_m - c.gripper_closed_m), 0, 1))
-        return {"signals": {"joint_position_rad": data["joints_rad"], "eef_position_m": data["flange_position_m"],
-                "eef_rpy_rad": data["flange_rpy_rad"], "gripper_opening": opening, "gripper_opening_measured": True,
+        measured = self._measured_flange(name, data)
+        position, rpy = data["flange_position_m"], data["flange_rpy_rad"]
+        if any(c.kinematic_joint_offsets_rad):
+            position = measured[:3, 3].tolist()
+            rpy = Rotation.from_matrix(measured[:3, :3]).as_euler("xyz").tolist()
+        return {"signals": {"joint_position_rad": data["joints_rad"], "eef_position_m": position,
+                "eef_rpy_rad": rpy, "native_eef_position_m": data["flange_position_m"],
+                "native_eef_rpy_rad": data["flange_rpy_rad"], "gripper_opening": opening, "gripper_opening_measured": True,
                 "controller_motion_status_code": data.get("controller_motion_status_code"),
                 "controller_target_reached": data.get("controller_target_reached")},
                 "freshness": "fresh", "age_s": data["age_s"], "moving": data["moving"], "timing": data["timing"],
@@ -183,7 +194,7 @@ class ArmBody:
             evidence["joint_tolerance_rad"] = self.tracking_limits.settle_joint_rad
             return joint_error <= self.tracking_limits.settle_joint_rad, evidence
         offset = np.asarray(c.T_flange_from_grasp)
-        measured = from_eef(data["flange_position_m"], data["flange_rpy_rad"]) @ offset
+        measured = self._measured_flange(name, data) @ offset
         target = self.geometry.fk(name, target_q) @ offset
         position, rotation = distance(measured, target)
         # Apply the strictest configured profile: a native call cannot loosen
@@ -194,9 +205,17 @@ class ArmBody:
                         position_tolerance_m=position_limit, orientation_tolerance_rad=rotation_limit)
         return position <= position_limit and rotation <= rotation_limit, evidence
 
-    @staticmethod
-    def _tracking_pose(data):
-        return [*data["flange_position_m"], *data["flange_rpy_rad"]]
+    def _measured_flange(self, name, data):
+        native = from_eef(data["flange_position_m"], data["flange_rpy_rad"])
+        if not any(self.installation.calibration.arms[name].kinematic_joint_offsets_rad):
+            return native
+        return self._kinematics[name].correct_feedback(data["joints_rad"], native)
+
+    def _tracking_pose(self, name, data):
+        if not any(self.installation.calibration.arms[name].kinematic_joint_offsets_rad):
+            return [*data["flange_position_m"], *data["flange_rpy_rad"]]
+        measured = self._measured_flange(name, data)
+        return [*measured[:3, 3], *Rotation.from_matrix(measured[:3, :3]).as_euler("xyz")]
 
     def _tracking_target(self, name, joints):
         pose = self.geometry.fk(name, joints)
@@ -205,7 +224,7 @@ class ArmBody:
     def _check_pose_tracking(self, guards, actual, *, segment):
         for name, data in actual.items():
             stamp = int(data["timing"]["received_monotonic_ns"]) / 1e9
-            violation = guards[name].check(stamp, self._tracking_pose(data))
+            violation = guards[name].check(stamp, self._tracking_pose(name, data))
             if violation is not None:
                 raise DeviceError(ErrorCode.TRACKING_ERROR, "Sustained end-effector tracking deviation",
                     details={"arm": name, "segment": segment, **violation})
@@ -325,7 +344,7 @@ class ArmBody:
                 last_target = path[0]
                 command_trace = []
                 guards = {n: PoseTrackingGuard(self.tracking_limits,
-                    int(data["timing"]["received_monotonic_ns"]) / 1e9, self._tracking_pose(data))
+                    int(data["timing"]["received_monotonic_ns"]) / 1e9, self._tracking_pose(n, data))
                     for n, data in current.items()}
                 try:
                     for index, (row, duration) in enumerate(zip(path[1:], durations), 1):

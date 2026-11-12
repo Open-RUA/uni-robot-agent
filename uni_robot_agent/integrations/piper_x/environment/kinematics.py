@@ -65,6 +65,9 @@ class Kinematics:
         if names != arm.joint_names:
             raise ValueError("URDF joint order differs from controller order")
         self.dof = len(names)
+        self.joint_offsets = np.asarray(self.config.joint_offsets_rad or [0.] * self.dof)
+        if self.joint_offsets.shape != (self.dof,) or not np.isfinite(self.joint_offsets).all():
+            raise ValueError("Expected one finite kinematic offset per joint")
         for joint in self.chain:
             if joint.attrib["type"] not in {"fixed", "revolute", "continuous"} or joint.find("mimic") is not None:
                 raise ValueError("Only fixed and independent rotational joints are supported")
@@ -86,6 +89,7 @@ class Kinematics:
                              ("1 0 0" if axis is None else axis.attrib["xyz"]).split()],
                 "axis_frame": "URDF joint-local frame after joint origin transform",
                 "command_limits_rad": [arm.joint_lower[index], arm.joint_upper[index]],
+                "kinematic_offset_rad": float(self.joint_offsets[index]),
             })
         return {
             "source": "sha256-pinned URDF; controller order and command limits verified against Body",
@@ -94,6 +98,7 @@ class Kinematics:
             "interpretation": (
                 "Joint numbers are one-based; state joints[] indices are zero-based. "
                 "Axes are joint-local, not world axes or end-effector roll/pitch/yaw controls. "
+                "Reported and commanded joints use controller angles; calibrated offsets apply only inside the model. "
                 "Do not infer an EEF rotation restriction from a joint number. A rejected "
                 "IK candidate/path does not prove all paths or directions are unreachable."
             ),
@@ -103,9 +108,19 @@ class Kinematics:
         return self.controller(joints) @ self.T_native_from_grasp
 
     def controller(self, joints):
-        """Native Body EEF; camera calibration and FK checks depend on this frame."""
+        """Calibrated flange pose from native measured/controller joint angles."""
+        return self._controller(joints, corrected=True)
+
+    def correct_feedback(self, joints, native_flange):
+        """Retain native pose residuals while applying the same model correction."""
+        if not np.any(self.joint_offsets):
+            return np.asarray(native_flange).copy()
+        return self.controller(joints) @ np.linalg.inv(self._controller(joints, corrected=False)) @ native_flange
+
+    def _controller(self, joints, *, corrected):
         if len(joints) != self.dof or not np.isfinite(joints).all():
             raise ValueError(f"FK requires {self.dof} finite joints")
+        joints = np.asarray(joints) + (self.joint_offsets if corrected else 0.)
         t, index = np.asarray(self.config.T_controller_from_urdf).copy(), 0
         for joint in self.chain:
             origin = joint.find("origin")

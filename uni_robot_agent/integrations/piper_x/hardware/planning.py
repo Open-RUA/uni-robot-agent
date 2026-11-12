@@ -120,7 +120,7 @@ class RobotGeometry:
             raise ValueError("Expected six finite joint angles")
         c = self.installation.calibration.arms[name]
         frames = {self.model.root_link: np.asarray(c.T_base_from_urdf)}
-        values = dict(zip(self.model.joint_names, q))
+        values = dict(zip(self.model.joint_names, np.asarray(q) + c.kinematic_joint_offsets_rad))
         pending = list(self.joints)
         while pending:
             progress = False

@@ -43,6 +43,7 @@ class KinematicsConfig(Contract):
     tip_link: str
     T_controller_from_urdf: Matrix
     T_tip_from_control: Matrix
+    joint_offsets_rad: list[FiniteFloat] = Field(default_factory=list, max_length=16)
     _transforms = field_validator("T_controller_from_urdf", "T_tip_from_control")(rigid)
 
 
@@ -70,6 +71,8 @@ class ArmConfig(Contract):
             raise ValueError("Joint names must be distinct")
         if not len(self.joint_lower) == len(self.joint_upper) == len(self.joint_names):
             raise ValueError("joint_lower and joint_upper need one bound per joint name")
+        if self.kinematics and self.kinematics.joint_offsets_rad and len(self.kinematics.joint_offsets_rad) != len(self.joint_names):
+            raise ValueError("Kinematic joint offsets need one entry per joint name")
         if self.rotation_radius_m < np.linalg.norm(np.asarray(self.T_native_from_grasp)[:3, 3]):
             raise ValueError("Rotation radius must cover the native EEF displacement about the grasp site")
         if any(lo >= hi for lo, hi in zip(self.joint_lower, self.joint_upper)):

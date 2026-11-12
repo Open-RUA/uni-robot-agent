@@ -207,6 +207,8 @@ class ArmCalibration(Contract):
     T_base_from_urdf: Matrix
     T_tip_from_flange: Matrix
     T_flange_from_grasp: Matrix
+    # Model angles are measured/controller angles plus these calibrated offsets.
+    kinematic_joint_offsets_rad: list[FiniteFloat] = Field(default_factory=lambda: [0.] * 6, min_length=6, max_length=6)
     joint_lower: list[FiniteFloat] = Field(min_length=6, max_length=6)
     joint_upper: list[FiniteFloat] = Field(min_length=6, max_length=6)
     motion_limits: MotionLimits
@@ -395,6 +397,7 @@ class Installation:
                 "tracking_tolerance_rad": TrackingLimits().settle_joint_rad,
                 "kinematics": {"urdf": self.urdf, "sha256": self.model.urdf.sha256,
                     "root_link": self.model.root_link, "tip_link": self.model.tip_link,
+                    "joint_offsets_rad": c.kinematic_joint_offsets_rad,
                     "T_controller_from_urdf": c.T_base_from_urdf, "T_tip_from_control": c.T_tip_from_flange}}
         cameras = {(name if cam.role == "scene" else f"{cam.parent_arm}_wrist_{name}"): {"device_id": cam.device_id, "expected_metadata": {"identity": self.identity(name, "cameras")},
                     "parent": cam.parent_arm or "world", "T_parent_from_optical": self.calibration.cameras[name].T_parent_from_optical,

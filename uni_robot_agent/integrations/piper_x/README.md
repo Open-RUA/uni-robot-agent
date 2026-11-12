@@ -47,6 +47,26 @@ installed tool's TCP is flange +z 0.1425 m, record it in `T_flange_from_grasp`
 with the actual orientation. Optical frames are calibrated independently.
 Calibration acquisition and measured station files are external to this source.
 
+An arm may declare six `kinematic_joint_offsets_rad` values in its calibration.
+They default to zero. Model angles are native measured/controller angles plus
+these offsets; reported joints, transmitted targets and native joint limits
+remain in controller coordinates. This is software kinematic calibration, not
+a firmware zero reset. FK, IK, link collision transforms and image-time wrist
+poses use the same per-arm model. The other arm's model is unaffected.
+
+With a nonzero correction, Body EEF feedback, tracking and Cartesian arrival use
+`FK_corrected(q) @ inverse(FK_nominal(q)) @ native_flange`. This preserves the
+native pose residual while applying the calibrated geometry. Unmodified native
+pose signals remain available as `native_eef_position_m` and `native_eef_rpy_rad`.
+Zero-offset installations retain their previous EEF values. Read-only mode loads
+only the lightweight FK model for corrected arms, never a motion writer or
+collision runtime.
+
+Changing this model requires matching hand-eye/base calibration and fresh
+independent validation, then updating the calibration file hash and preparing a
+new environment. Do not install a corrected camera extrinsic with an uncorrected
+robot model. Offsets alone do not satisfy any station acceptance check.
+
 Public wrist camera names are `<arm-name>_wrist_<configured-camera-name>`.
 Scene names are retained. Shared tools can then select the acting arm's wrist
 views while the adapter preserves device identities and parent-frame calibration.
