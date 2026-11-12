@@ -1,4 +1,4 @@
-"""Deterministic all-arm IK and conservative capsule swept-volume preflight.
+"""Deterministic all-arm IK with an explicit installation validation profile.
 
 Capsules must be commissioned enclosing geometry, including the gripper at its
 maximum opening. They are hash-pinned model assets, not inferred from URDF names.
@@ -19,6 +19,11 @@ from uni_robot_agent.integrations.piper_x.body.core.contract import DeviceError,
 from uni_robot_agent.integrations.piper_x.body.core.arm.tracking import TrackingLimits
 from uni_robot_agent.integrations.piper_x.environment.kinematics import from_eef, bounded_target, distance
 from ..config import FileRef
+
+# Measured near-bound feedback may enter the native command interval. These
+# never expand transmitted joint limits or permit continued out-of-range goals.
+ENTRY_FEEDBACK_TOLERANCE_RAD = .02
+ENTRY_COMMAND_MARGIN_RAD = .01
 
 
 class Capsule(Contract):
@@ -70,8 +75,12 @@ class RobotGeometry:
         self.installation = installation
         self.tracking_limits = TrackingLimits()
         self.model = installation.model
-        self.collision = CollisionModel.model_validate_json(installation.collision.read_text())
-        if self.collision.scope == "urdf_only" and not (
+        self.collision_enabled = installation.robot.motion_validation == "collision"
+        if not self.collision_enabled and not installation.calibration.operator_supervised:
+            raise ValueError("Command-limit execution requires operator supervision")
+        self.collision = (CollisionModel.model_validate_json(installation.collision.read_text())
+                          if self.collision_enabled else None)
+        if self.collision and self.collision.scope == "urdf_only" and not (
                 installation.calibration.operator_supervised
                 and installation.calibration.geometry_limitations_accepted.strip()):
             raise ValueError("URDF-only geometry requires explicit operator acceptance of omitted tooling")
@@ -79,14 +88,14 @@ class RobotGeometry:
         self.joints = list(root.findall("joint"))
         self.links = {link.attrib["name"] for link in root.findall("link")}
         geometry_links = {link.attrib["name"] for link in root.findall("link") if link.findall("collision")}
-        covered = {capsule.link for capsule in self.collision.capsules}
-        if (not self.collision.enclosure_verified or self.collision.urdf_sha256 != self.model.urdf.sha256
+        covered = {capsule.link for capsule in self.collision.capsules} if self.collision else set()
+        if self.collision and (not self.collision.enclosure_verified or self.collision.urdf_sha256 != self.model.urdf.sha256
                 or not geometry_links <= covered or not covered <= self.links):
             raise ValueError("Collision model is unverified, incomplete or belongs to another URDF")
-        if set(self.collision.table_exempt_links) - {self.model.root_link}:
+        if self.collision and set(self.collision.table_exempt_links) - {self.model.root_link}:
             raise ValueError("Only the fixed base can be exempted from the table check")
         adjacent = {frozenset((j.find("parent").get("link"), j.find("child").get("link"))) for j in self.joints}
-        self.ignored = {frozenset(pair) for pair in self.collision.ignored_self_pairs}
+        self.ignored = {frozenset(pair) for pair in self.collision.ignored_self_pairs} if self.collision else set()
         if not self.ignored <= adjacent:
             raise ValueError("Only adjacent URDF links may be excluded from self collision")
         for joint in self.joints:
@@ -99,12 +108,14 @@ class RobotGeometry:
                         or self.model.joint_upper[index] > float(limit.get("upper"))):
                     raise ValueError("Model limits exceed the pinned URDF limits")
         # Bounds displacement of any enclosed point per radian for every joint.
-        self.reach = sum(np.linalg.norm(self._origin(j)[:3, 3]) for j in self.joints) + max(
-            max(np.linalg.norm(c.start), np.linalg.norm(c.end)) + c.radius_m for c in self.collision.capsules)
+        extent = (max(max(np.linalg.norm(c.start), np.linalg.norm(c.end)) + c.radius_m
+                      for c in self.collision.capsules) if self.collision else
+                  max(c.rotation_radius_m for c in installation.calibration.arms.values()))
+        self.reach = sum(np.linalg.norm(self._origin(j)[:3, 3]) for j in self.joints) + extent
         if self.reach <= 0:
             raise ValueError("Degenerate collision geometry")
         self.mesh_checks = None
-        if self.collision.meshes:
+        if self.collision and self.collision.meshes:
             from .mesh_collision import MeshChecks
             self.mesh_checks = MeshChecks(self, root, self.collision.meshes)
 
@@ -166,15 +177,20 @@ class RobotGeometry:
             q = np.clip(q + np.clip(dq, -.1, .1), c.joint_lower, c.joint_upper)
         raise DeviceError(ErrorCode.LIMIT_VIOLATION, f"{name}: IK failed before dispatch", stage="preflight")
 
-    def check(self, positions, inflation=None):
+    def check(self, positions, inflation=None, *, measured=False):
         capsules = []
         cal = self.installation.calibration
+        for name, q in positions.items():
+            c = cal.arms[name]
+            q = np.asarray(q)
+            tolerance = ENTRY_FEEDBACK_TOLERANCE_RAD if measured and not self.collision_enabled else 0.
+            if (q.shape != (6,) or not np.isfinite(q).all()
+                    or np.any(q < np.asarray(c.joint_lower) - tolerance)
+                    or np.any(q > np.asarray(c.joint_upper) + tolerance)):
+                raise DeviceError(ErrorCode.LIMIT_VIOLATION, "Joint range exceeded", stage="preflight")
+        if not self.collision_enabled:
+            return
         if self.mesh_checks is not None:
-            for name, q in positions.items():
-                c = cal.arms[name]
-                q = np.asarray(q)
-                if q.shape != (6,) or not np.isfinite(q).all() or np.any(q < c.joint_lower) or np.any(q > c.joint_upper):
-                    raise DeviceError(ErrorCode.LIMIT_VIOLATION, "Joint range exceeded", stage="preflight")
             return self.mesh_checks.check(positions, inflation)
         for name, q in positions.items():
             c = cal.arms[name]
@@ -196,6 +212,29 @@ class RobotGeometry:
             if segment_distance(a[2], a[3], b[2], b[3]) <= a[4] + b[4] + cal.collision_margin_m:
                 raise DeviceError(ErrorCode.LIMIT_VIOLATION, "Self or inter-arm collision clearance failed", stage="preflight")
 
+    def entry_recovery(self, measured):
+        """Return one bounded entry destination, never the original task goal."""
+        if self.collision_enabled:
+            return None
+        self.check(measured, measured=True)
+        start = {name: np.asarray(q, dtype=float) for name, q in measured.items()}
+        goal = {name: q.copy() for name, q in start.items()}
+        changed = False
+        for name, q in start.items():
+            calibration = self.installation.calibration.arms[name]
+            lower, upper = np.asarray(calibration.joint_lower), np.asarray(calibration.joint_upper)
+            margin = np.minimum(ENTRY_COMMAND_MARGIN_RAD, (upper - lower) / 4)
+            below, above = q < lower, q > upper
+            goal[name][below] = (lower + margin)[below]
+            goal[name][above] = (upper - margin)[above]
+            changed |= bool(np.any(below | above))
+        if not changed:
+            return None
+        self.check(goal)
+        if not self._within_command_step(start, goal):
+            raise DeviceError(ErrorCode.LIMIT_VIOLATION, "Joint entry exceeds command step limits", stage="preflight")
+        return goal
+
     def _within_command_step(self, start, end):
         for name in start:
             limits = self.installation.calibration.arms[name].motion_limits
@@ -206,17 +245,36 @@ class RobotGeometry:
                 return False
         return True
 
+    def _subdivisions(self, start, end):
+        if self.collision_enabled:
+            return max(1, *(math.ceil(self.reach * np.sum(np.abs(end[n] - start[n])) /
+                            (self.installation.calibration.collision_margin_m / 4)) for n in start))
+        # Retain fine kinematic sampling and command-step bounds without using
+        # scene margins or implying any geometric collision clearance.
+        counts = [1]
+        for name in start:
+            limits = self.installation.calibration.arms[name].motion_limits
+            delta = np.abs(end[name] - start[name])
+            counts.extend((math.ceil(np.max(delta) / (limits.joint_step_rad / 4)),
+                           math.ceil(self.reach * np.sum(delta) / (limits.eef_step_m / 4)),
+                           math.ceil(np.sum(delta) / (limits.eef_rotation_step_rad / 4))))
+        return max(counts)
+
     def check_measured_segment(self, start, end, *, checkpoint=None):
         """Validate the actual start to the next target, not an assumed arrival.
 
-        This is the same swept-volume proof used in preflight. A stationary
-        servo residual does not authorize skipping the unchecked connection.
+        Collision mode repeats the preflight swept-volume proof. Command-limit
+        mode retains native range and step checks on the measured connection.
         """
-        self.check(start)
+        self.check(start, measured=not self.collision_enabled)
+        self.check(end)
         if not self._within_command_step(start, end):
             return False
-        steps = max(1, *(math.ceil(self.reach * np.sum(np.abs(end[n] - start[n])) /
-                        (self.installation.calibration.collision_margin_m / 4)) for n in start))
+        if not self.collision_enabled:
+            # Each native command endpoint is bounded. The only interval outside
+            # the bounds is the monotone entry from near-bound measured feedback.
+            return True
+        steps = self._subdivisions(start, end)
         if steps > 2000:
             raise DeviceError(ErrorCode.LIMIT_VIOLATION, "Measured segment subdivision budget exceeded")
         for i in range(1, steps + 1):
@@ -270,8 +328,7 @@ class RobotGeometry:
                     next_q[name] = self.ik(name, waypoint, current[name], checkpoint=checkpoint)
             # Cover each joint interpolation interval with inflated endpoint capsules.
             # The reach bound covers all joints, making this conservative between samples.
-            steps = max(1, *(math.ceil(self.reach * np.sum(np.abs(next_q[n] - current[n])) /
-                            (self.installation.calibration.collision_margin_m / 4)) for n in current))
+            steps = self._subdivisions(current, next_q)
             if steps > 2000:
                 raise DeviceError(ErrorCode.LIMIT_VIOLATION, "Path subdivision budget exceeded")
             command_start, previous = current, current

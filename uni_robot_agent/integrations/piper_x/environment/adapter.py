@@ -76,6 +76,8 @@ class Adapter:
     def _describe(self):
         config = self.config
         metadata = {"robot_id": config.robot_id, "physical_hardware": True, "execute": config.execute,
+            "motion_validation": config.motion_validation,
+            "collision_checking_enabled": config.motion_validation == "collision",
             "T_native_from_grasp": {n: a.T_native_from_grasp for n, a in config.arms.items()},
             "joint_kinematics": {n: k.joint_description(config.arms[n]) for n, k in self.kinematics.items()},
             "control_frequency_semantics": "maximum_submission_rate_not_realtime_guarantee"}

@@ -122,12 +122,16 @@ class ArmBody:
                     "joint_limits_rad": {"lower": c.joint_lower, "upper": c.joint_upper},
                     "motion_limits": c.motion_limits.model_dump(), "eef_coordinates": coordinate_metadata(arm.device_id),
                     "tracking_limits": self.tracking_limits.to_dict(),
+                    "motion_validation": self.robot.motion_validation,
+                    "collision_checking_enabled": self.robot.motion_validation == "collision",
                     "kinematic_joint_offsets_rad": c.kinematic_joint_offsets_rad,
                     "eef_pose_source": "native feedback with calibrated kinematic correction" if any(c.kinematic_joint_offsets_rad) else "native feedback",
                     "model_sha256": self.installation.model.urdf.sha256, "motion_enabled": self.execute},
                 limitations=["Host CAN receive timestamps; no controller hardware clock", "Software stop is not a certified E-stop",
+                    *(["Command-limit validation only; no table, self or inter-arm collision checks"]
+                      if self.robot.motion_validation == "command_limits" else []),
                     *(["Collision checks cover the URDF only; omitted tooling requires operator supervision"]
-                      if self.geometry and self.geometry.collision.scope == "urdf_only" else [])]))
+                      if self.geometry and self.geometry.collision and self.geometry.collision.scope == "urdf_only" else [])]))
         return BodyManifest(self.body_id, "piper_x", devices)
 
     def read(self, device_id, include=None):
@@ -201,6 +205,11 @@ class ArmBody:
         # the selected tool profile, even though that profile is not sent here.
         position_limit = min(p.position_tolerance_m for p in self.robot.motion_profiles.values())
         rotation_limit = min(p.orientation_tolerance_rad for p in self.robot.motion_profiles.values())
+        if self.robot.motion_validation == "command_limits":
+            # Match ARX's native settle envelope. Shared tools still assess the
+            # selected standard/approach/precision profile at the grasp site.
+            position_limit = self.tracking_limits.position_m
+            rotation_limit = self.tracking_limits.rotation_rad
         evidence.update(position_error_m=position, rotation_error_rad=rotation,
                         position_tolerance_m=position_limit, orientation_tolerance_rad=rotation_limit)
         return position <= position_limit and rotation <= rotation_limit, evidence
@@ -285,9 +294,24 @@ class ArmBody:
                         target["target_position_m"] = goal[:3, 3].tolist()
                         target["target_rpy_rad"] = Rotation.from_matrix(goal[:3, :3]).as_euler("xyz").tolist()
                         travel_limited = True
+            entry_recovery = None
             try:
-                path = self.geometry.plan(measured, targets, segment_m=params["segment_m"],
-                                          max_segments=params["max_segments"], checkpoint=checkpoint)
+                if self.robot.motion_validation == "command_limits":
+                    entry_recovery = self.geometry.entry_recovery(measured)
+                if entry_recovery is not None:
+                    if any(data["moving"] is not False for data in before.values()):
+                        raise DeviceError(ErrorCode.LIMIT_VIOLATION, "Joint entry requires stationary feedback", stage="preflight")
+                    path = [{n: np.asarray(q, dtype=float) for n, q in measured.items()}, entry_recovery]
+                    # Entry is a separate acknowledged prefix. Keep the grippers
+                    # unchanged and require a new observation before task motion.
+                    for n, target in targets.items():
+                        c = self.installation.calibration.arms[n]
+                        target["gripper_opening"] = float(np.clip((before[n]["agx_gripper"]["width_m"] - c.gripper_closed_m) /
+                            (c.gripper_open_m - c.gripper_closed_m), 0, 1))
+                    minimum_duration = .2
+                else:
+                    path = self.geometry.plan(measured, targets, segment_m=params["segment_m"],
+                                              max_segments=params["max_segments"], checkpoint=checkpoint)
             except DeviceError as error:
                 if error.code == ErrorCode.LIMIT_VIOLATION and error.execution_outcome == "none":
                     error.stage = "preflight"
@@ -336,7 +360,7 @@ class ArmBody:
                     raise DeviceError(ErrorCode.OBSERVATION_STALE, "Measured start changed during preflight; observe and plan a new path", stage="preflight")
                 # Every next connection is checked again from measured joints.
                 # Admission tolerance is not a continuous collision guarantee.
-                self.geometry.check({n: current[n]["joints_rad"] for n in measured})
+                self.geometry.check({n: current[n]["joints_rad"] for n in measured}, measured=True)
                 submitted = False
                 elapsed = 0.
                 completed_segments = 0
@@ -399,7 +423,7 @@ class ArmBody:
                             if cancel.wait(.005) or self._blocked.is_set() or time.monotonic() >= deadline:
                                 raise InterruptedError("Path interrupted")
                             actual = {n: self._require_feedback(n) for n in row}
-                            self.geometry.check({n: data["joints_rad"] for n, data in actual.items()})
+                            self.geometry.check({n: data["joints_rad"] for n, data in actual.items()}, measured=True)
                             self._check_pose_tracking(guards, actual, segment=index)
                         progress(index / (len(path) - 1))
                         elapsed += duration
@@ -407,25 +431,31 @@ class ArmBody:
                     windows = {n: ArrivalWindow() for n in measured}
                     while time.monotonic() < deadline:
                         actual = {n: self._require_feedback(n) for n in measured}
-                        self.geometry.check({n: data["joints_rad"] for n, data in actual.items()})
+                        self.geometry.check({n: data["joints_rad"] for n, data in actual.items()}, measured=True)
                         self._check_pose_tracking(guards, actual, segment=completed_segments)
                         arrivals = {}
                         for n, data in actual.items():
                             stamp = int(data["timing"]["received_monotonic_ns"]) / 1e9
                             within, errors = self._arrival_error(n, data, last_target[n], held="hold_joints" in targets[n])
+                            if entry_recovery is not None:
+                                c = self.installation.calibration.arms[n]
+                                within = within and bool(np.all(np.asarray(data["joints_rad"]) >= c.joint_lower)
+                                                         and np.all(np.asarray(data["joints_rad"]) <= c.joint_upper))
                             settled = windows[n].update(stamp, stamp >= final_sent_at and
                                 data["moving"] is False and within)
                             arrivals[n] = {"verified": settled, **errors,
                                 "feedback_samples": windows[n].samples,
                                 "controller_target_reached": data.get("controller_target_reached")}
                         if all(row["verified"] for row in arrivals.values()):
-                            return {"requested_targets_reached": not (truncated or travel_limited or residual_prefix), "robot_id": self.robot.robot_id,
-                                    "prefix_reason": "measured_start_step" if residual_prefix else
+                            return {"requested_targets_reached": not (truncated or travel_limited or residual_prefix or entry_recovery is not None), "robot_id": self.robot.robot_id,
+                                    "prefix_reason": "joint_entry_recovery" if entry_recovery is not None else "measured_start_step" if residual_prefix else
                                         "action_duration" if truncated else "travel_budget" if travel_limited else None,
                                     "planned_segments": completed_segments, "planned_duration_s": elapsed,
                                     "arrival": arrivals,
                                     "command_trace": command_trace,
                                     "tracking_limits": self.tracking_limits.to_dict(),
+                                    "motion_validation": self.robot.motion_validation,
+                                    "collision_checked": self.robot.motion_validation == "collision",
                                     "completion_basis": "consecutive_fresh_target_feedback_after_final_command"}
                         if cancel.wait(.01) or self._blocked.is_set():
                             raise InterruptedError("Interrupted during final arrival")

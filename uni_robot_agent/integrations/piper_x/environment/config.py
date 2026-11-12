@@ -123,6 +123,7 @@ class Config(Contract):
     arms: dict[str, ArmConfig] = Field(min_length=1)
     cameras: dict[str, CameraConfig]
     execute: bool = False
+    motion_validation: Literal["collision", "command_limits"] = "collision"
     motion_execution: Literal["wholepath"] = "wholepath"
     normalized_opening_tolerance: FiniteFloat | None = Field(default=None, gt=0, le=.5)
     # Replaces the shared tool defaults for the named profiles; absent names keep them.

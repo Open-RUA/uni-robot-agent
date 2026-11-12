@@ -22,6 +22,8 @@ def verify(client, config, *, arm_names=None, verify_readiness=True):
         if problems:
             raise ValueError(f"Body {name} does not meet the arm contract: " + "; ".join(problems))
         metadata = device["metadata"]
+        if metadata.get("motion_validation", "collision") != config.motion_validation:
+            raise ValueError(f"Body {name} motion validation differs from configuration")
         if config.execute and metadata.get("motion_enabled") is False:
             raise ValueError(f"Body {name} has physical motion disabled")
         for key, expected in arm.expected_metadata.items():

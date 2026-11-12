@@ -133,6 +133,29 @@ environment before tool assembly.
 
 ## Motion, stopping and migration
 
+`robot.json.motion_validation` selects the native preflight contract. Its
+default, `collision`, preserves the commissioned swept-volume checks and
+geometry requirements. Existing installations need no configuration change.
+For supervised operation with the same collision-checking scope as ARX ONE,
+explicitly select `command_limits` and record `operator_supervised: true` in
+the calibration. This profile checks FK/IK, native joint bounds, command steps,
+speeds, feedback freshness, pose tracking and measured arrival. It does **not**
+check table, self or inter-arm collisions, or require camera-bracket/cable
+geometry. Pinned model assets remain recorded, but collision enclosure evidence
+is not a motion prerequisite in this profile. Deployment audit, Body metadata
+and motion receipts identify the selected profile; they never claim collision
+clearance for `command_limits`. Commissioning checks remain explicit evidence
+or attributed skips, rather than being marked passed by this selection.
+
+In `command_limits`, stationary feedback at most 0.02 rad outside a native joint
+bound may trigger a separate entry prefix on the next requested operation. Only
+outlying joints move, to 0.01 rad inside the original bounds, subject to the same
+step/speed limits; gripper openings are retained. All transmitted destinations
+remain inside native limits. The receipt reports `joint_entry_recovery` and
+`requested_targets_reached: false`, requiring fresh observation and replanning.
+Larger excursions are rejected. Feedback is never clipped, and this is neither
+a zero reset nor an automatic action at startup. Collision mode remains unchanged.
+
 One `move` uses a mainline `PathCommand` and a group-only Body operation.
 All arms are preflighted, including measured holds for idle arms. The public
 command limit is 24 path segments. `grasp`, `release` and `hold` preserve their

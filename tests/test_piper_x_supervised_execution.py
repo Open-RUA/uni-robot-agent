@@ -80,7 +80,8 @@ def test_urdf_scope_still_requires_verified_geometry_and_explicit_acceptance(tmp
 def body():
     obj = object.__new__(ArmBody)
     obj._by_device = {"left": "left", "right": "right"}
-    obj.robot = SimpleNamespace(arms={"left": None, "right": None}, feedback_max_age_s=.1)
+    obj.robot = SimpleNamespace(arms={"left": None, "right": None}, feedback_max_age_s=.1,
+                               motion_validation="collision")
     obj.execute = True
     obj._dispatch_lock = threading.Lock()
     obj._planning_lock = threading.Lock()

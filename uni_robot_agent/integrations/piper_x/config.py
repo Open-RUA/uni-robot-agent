@@ -167,6 +167,7 @@ class Camera(Contract):
 
 class Robot(Contract):
     robot_id: str = Field(pattern=r"^[A-Za-z0-9_-]+$")
+    motion_validation: Literal["collision", "command_limits"] = "collision"
     arms_body: str
     cameras_body: str
     arms: dict[str, Arm] = Field(min_length=1)
@@ -332,6 +333,8 @@ class Installation:
                 raise ValueError(f"{name}: calibration capture settings mismatch")
 
     def require_motion(self):
+        if self.robot.motion_validation == "command_limits" and not self.calibration.operator_supervised:
+            raise ValueError("Command-limit execution requires operator supervision")
         required = {"identity", "fk_tcp", "cameras", "grippers", "independent_stop", "dual_motion"}
         recorded = self.calibration.accepted_checks | self.calibration.skipped_checks.keys()
         if recorded != required:
@@ -352,6 +355,8 @@ class Installation:
                 "sdk_version": self.model.sdk_version, "protocol": self.model.protocol,
                 "urdf_sha256": self.model.urdf.sha256, "collision_sha256": self.model.collision.sha256,
                 "firmware_profile": self.model.firmware_profile,
+                "motion_validation": self.robot.motion_validation,
+                "collision_checking_enabled": self.robot.motion_validation == "collision",
                 "motion_limits": {n: a.motion_limits.model_dump() for n, a in self.calibration.arms.items()},
                 "arm_roles": {n: a.role for n, a in self.robot.arms.items()},
                 "cameras": {n: {"role": c.role, "parent_arm": c.parent_arm} for n, c in self.robot.cameras.items()},
@@ -408,6 +413,7 @@ class Installation:
             raise ValueError("Tool-side camera names collide; rename the scene camera")
         return Config(robot_id=self.robot.robot_id, arms_body=body(self.robot.arms_body),
             cameras_body=body(self.robot.cameras_body), arms=arms, cameras=cameras, execute=execute,
+            motion_validation=self.robot.motion_validation,
             motion_profiles=self.robot.motion_profiles, action_timeout_s=self.robot.action_timeout_s,
             normalized_opening_tolerance=min(a.gripper_tolerance_m / (a.gripper_open_m-a.gripper_closed_m)
                                              for a in self.calibration.arms.values()),
