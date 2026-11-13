@@ -26,6 +26,7 @@ def stage_runtime(root: Path, destination: Path) -> None:
     # Planner, development and other deployment extras remain excluded.
     project['optional-dependencies'] = {
         'benchmarks': project['optional-dependencies']['benchmarks'],
+        'piper_x': project['optional-dependencies']['piper_x'],
     }
     # Both distributions own the same modules, but are never dependencies of one
     # another. Keeping the main wheel intact preserves upgrades from 0.1.0.

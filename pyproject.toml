@@ -48,6 +48,7 @@ claude = []
 dev = ["build>=1", "twine>=6", "tomli-w>=1"]
 # OpenCV 5 removed calibrateHandEye, which the ARX ONE hand-eye solvers use.
 arx_one = ["scipy>=1.10", "opencv-python-headless>=4.8,<5", "pyyaml>=6"]
+piper_x = ["scipy>=1.10", "opencv-python-headless>=4.8,<5", "python-fcl>=0.7,<0.8", "pyrealsense2>=2.55,<3; sys_platform == 'linux'"]
 robolab = ["scipy>=1.10", "trimesh>=4,<5", "python-fcl>=0.7,<0.8"]
 robodojo = [
     "trimesh>=4,<5",
@@ -81,6 +82,7 @@ namespaces = false
 "uni_robot_agent" = ["py.typed"]
 "uni_robot_agent.resources" = ["prompts/**/*.md", "prompts/robodojo/task_requirements.json", "prompts/robodojo/instruction_supplements.json", "skills/**/*.md"]
 "uni_robot_agent.integrations.robolab" = ["SOURCE.md"]
+"uni_robot_agent.integrations.piper_x" = ["templates/*.json", "SOURCE.md", "README.md"]
 "uni_robot_agent.integrations.dexjoco" = ["deployment.toml", "SOURCE.md"]
 "uni_robot_agent.integrations.behavior" = ["deployment.toml", "SOURCE.md"]
 "uni_robot_agent.integrations.isaaclab_arena" = ["deployment.toml", "SOURCE.md"]

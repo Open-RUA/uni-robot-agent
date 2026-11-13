@@ -48,6 +48,12 @@ supplies third-party binaries, meshes and calibration as described in its
 [deployment guide](../uni_robot_agent/integrations/arx_one/DEPLOYMENT.md).
 Public support for **Franka** is **Coming soon**.
 
+`piper_x` provides a separate Piper-X Body runtime and environment adapter using
+the same Direct tools and `wholepath` contract. It includes an observation-only
+`readonly` tool profile and explicit per-station identity/calibration manifests.
+See [Piper-X](../uni_robot_agent/integrations/piper_x/README.md) for preparation,
+official CLI commands, migration details and hardware validation status.
+
 ## Inspect integration options
 
 ```bash

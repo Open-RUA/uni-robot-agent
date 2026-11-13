@@ -1,0 +1,24 @@
+{
+  "urdf_sha256": "<URDF_SHA256>",
+  "enclosure_verified": false,
+  "capsules": [
+    {
+      "link": "<URDF_LINK>",
+      "start": [
+        null,
+        null,
+        null
+      ],
+      "end": [
+        null,
+        null,
+        null
+      ],
+      "radius_m": null
+    }
+  ],
+  "ignored_self_pairs": [],
+  "table_exempt_links": [
+    "<FIXED_BASE_LINK>"
+  ]
+}

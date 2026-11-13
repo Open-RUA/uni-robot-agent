@@ -1,0 +1,102 @@
+{
+  "host_id": "<HOST_ID>",
+  "operator": "<USER>",
+  "listen": "127.0.0.1",
+  "connect_host": "127.0.0.1",
+  "state_dir": "runtime",
+  "lock_dir": "shared-physical-locks",
+  "tokens_file": "tokens.private.json",
+  "bodies": {
+    "arms": {
+      "body_id": "<ARMS_BODY_ID>",
+      "robot_id": "<ROBOT_ID>",
+      "kind": "arms",
+      "port": null,
+      "token_env": "PIPER_ARMS_TOKEN"
+    },
+    "cameras": {
+      "body_id": "<CAMERAS_BODY_ID>",
+      "robot_id": "<ROBOT_ID>",
+      "kind": "cameras",
+      "port": null,
+      "token_env": "PIPER_CAMERAS_TOKEN"
+    }
+  },
+  "arms": {
+    "arm_a_bus": {
+      "interface": "<ARM_A_BUS_INTERFACE>",
+      "usb_vendor": "<VID>",
+      "usb_product": "<PID>",
+      "usb_serial": "<ARM_A_BUS_UNIQUE_USB_SERIAL>",
+      "usb_topology": null,
+      "channel": null
+    },
+    "arm_b_bus": {
+      "interface": "<ARM_B_BUS_INTERFACE>",
+      "usb_vendor": "<VID>",
+      "usb_product": "<PID>",
+      "usb_serial": "<ARM_B_BUS_UNIQUE_USB_SERIAL>",
+      "usb_topology": null,
+      "channel": null
+    }
+  },
+  "cameras": {
+    "overview_sensor": {
+      "serial": "<OVERVIEW_SENSOR_SERIAL>",
+      "model": "<SDK_REPORTED_MODEL>",
+      "color": {
+        "width": null,
+        "height": null,
+        "fps": null,
+        "format": "rgb8"
+      },
+      "depth": {
+        "width": null,
+        "height": null,
+        "fps": null,
+        "format": "z16"
+      },
+      "max_pair_skew_s": null,
+      "timeout_ms": null,
+      "max_frame_age_s": null
+    },
+    "wrist_a_sensor": {
+      "serial": "<WRIST_A_SENSOR_SERIAL>",
+      "model": "<SDK_REPORTED_MODEL>",
+      "color": {
+        "width": null,
+        "height": null,
+        "fps": null,
+        "format": "rgb8"
+      },
+      "depth": {
+        "width": null,
+        "height": null,
+        "fps": null,
+        "format": "z16"
+      },
+      "max_pair_skew_s": null,
+      "timeout_ms": null,
+      "max_frame_age_s": null
+    },
+    "wrist_b_sensor": {
+      "serial": "<WRIST_B_SENSOR_SERIAL>",
+      "model": "<SDK_REPORTED_MODEL>",
+      "color": {
+        "width": null,
+        "height": null,
+        "fps": null,
+        "format": "rgb8"
+      },
+      "depth": {
+        "width": null,
+        "height": null,
+        "fps": null,
+        "format": "z16"
+      },
+      "max_pair_skew_s": null,
+      "timeout_ms": null,
+      "max_frame_age_s": null
+    }
+  }
+}

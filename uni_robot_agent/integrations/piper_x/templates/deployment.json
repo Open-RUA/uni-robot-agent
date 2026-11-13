@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "model": "model.json",
+  "host": "host.json",
+  "robot": "robot.json"
+}
