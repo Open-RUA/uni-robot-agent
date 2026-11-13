@@ -35,12 +35,14 @@ class EventLog:
         *,
         cursor: str | None = None,
         device_ids: Iterable[str] | None = None,
+        allowed_devices: Iterable[str] | None = None,
         types: Iterable[str] | None = None,
         limit: int = 50,
         wait_s: float = 0.0,
     ) -> tuple[list[dict[str, Any]], str | None]:
         after = int(cursor) if cursor else 0
         wanted_devices = set(device_ids) if device_ids else None
+        allowed = set(allowed_devices) if allowed_devices is not None else None
         wanted_types = set(types) if types else None
         deadline = time.monotonic() + max(0.0, float(wait_s))
         with self._lock:
@@ -51,6 +53,7 @@ class EventLog:
                     if e["seq"] > after
                     and (wanted_types is None or e["type"] in wanted_types)
                     and (wanted_devices is None or not e["device_ids"] or wanted_devices.intersection(e["device_ids"]))
+                    and (allowed is None or (e["device_ids"] and set(e["device_ids"]) <= allowed))
                 ]
                 if selected or wait_s <= 0:
                     break
@@ -248,6 +251,13 @@ class StreamTable:
         if resumed:
             self._emit("stream_resumed", stream)
         return {"accepted": True, "seq": int(seq), "clamped": clamped_any, "applied": applied}
+
+    def get(self, stream_id: str) -> Stream:
+        with self._lock:
+            stream = self._streams.get(stream_id)
+            if stream is None:
+                raise DeviceError(ErrorCode.STREAM_CLOSED, "unknown stream", details={"stream_id": stream_id})
+            return stream
 
     def close(self, *, stream_id: str, principal: str | None = None) -> Stream:
         with self._lock:

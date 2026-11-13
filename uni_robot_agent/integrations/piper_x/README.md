@@ -77,6 +77,14 @@ already have pinhole geometry. The observation adapter preserves their pixels
 directly without allocating identity rectification maps. Nonzero distortion
 and all source-time freshness checks retain their normal processing.
 
+Camera resolution and frame rate are installation settings in `host.json`, not
+planner-side image resizing. The driver reads intrinsics from the active color
+profile and aligns depth to that profile. When changing capture settings, update
+the calibration capture identity and file hash, then prepare the environment
+again. Do not scale a previous intrinsic matrix by the image-size ratio: a
+different sensor profile may change the field of view. Retain extrinsics only
+while the physical camera mounting is unchanged and recheck alignment.
+
 Validate and generate host configuration without hardware access:
 
 ```bash
@@ -89,6 +97,12 @@ These default to observation-only arms. After commissioning, add `--execute`
 to both commands to validate and prepare physical execution. Keep credential
 values in a private token file and environment. The host token file maps tokens
 to Body principals; configured environment variables select those tokens.
+An optional principal `device_ids` set limits both reads and physical actions.
+Omitting the scope permits all devices; an empty set permits none. Device-scoped
+queries exclude records spanning unauthorized devices, even for credentials
+sharing a principal name. An `estop` without an explicit device selection acts
+only on that credential's allowed devices. Native aggregate health details are
+omitted for device-scoped credentials.
 
 ## Start an episode
 
@@ -148,13 +162,19 @@ clearance for `command_limits`. Commissioning checks remain explicit evidence
 or attributed skips, rather than being marked passed by this selection.
 
 In `command_limits`, stationary feedback at most 0.02 rad outside a native joint
-bound may trigger a separate entry prefix on the next requested operation. Only
-outlying joints move, to 0.01 rad inside the original bounds, subject to the same
-step/speed limits; gripper openings are retained. All transmitted destinations
+bound may trigger a separate entry prefix on the next requested operation. On
+each arm with an outlying joint, all joints within 0.03 rad of a bound receive
+targets 0.03 rad inside that bound, subject to the same step/speed limits.
+Unaffected arms and gripper openings are retained. All transmitted destinations
 remain inside native limits. The receipt reports `joint_entry_recovery` and
 `requested_targets_reached: false`, requiring fresh observation and replanning.
 Larger excursions are rejected. Feedback is never clipped, and this is neither
 a zero reset nor an automatic action at startup. Collision mode remains unchanged.
+Exact-bound feedback alone does not trigger entry. Applying the margin to all
+boundary joints on the recovering arm avoids a peer joint drifting outside
+while the original outlier recovers. The margin accommodates small measured
+servo residuals; success still requires consecutive feedback strictly inside
+the native bounds.
 
 One `move` uses a mainline `PathCommand` and a group-only Body operation.
 All arms are preflighted, including measured holds for idle arms. The public
@@ -168,6 +188,14 @@ Stop the environment with Ctrl-C or SIGTERM. Like ARX, its exit handler calls
 lock. Body closes admission and verifies fresh stationary feedback. Piper uses
 measured joint-position holding for software stopping; this is not a certified
 hardware emergency stop. Keep the station's physical stop available during use.
+Stop evidence reports three distinct fresh stationary samples separately from
+hold-request errors and quarantined operations. Stationary feedback does not
+prove target arrival, clear quarantine, replay a command, or certify a failed
+hold. These failures remain blocked for operator recovery. Upgrade and restart
+the native arm Body and environment together to use the updated entry behavior.
+On restart, quarantine is reconstructed from every unknown operation in the
+journal, regardless of list pagination. Only persisted acknowledgements for the
+specific device and operation can clear its quarantine; the receipt stays unknown.
 
 Migration from experimental v2 requires matching packages and restarted native
 services. Regenerate host configuration for `integrations.piper_x.body`. Old
@@ -192,7 +220,23 @@ PYTHONPATH=.:tests python -m pytest tests/test_piper_x*.py
 PYTHONPATH=. python scripts/validation/tool_composition.py
 ```
 
-This migration has not been deployed or tested on hardware. Historical runs
-of the experimental tree do not validate this revision. Keep station files,
-credentials, measured calibration and run artifacts outside source.
+Two supervised dual-arm trials on 2026-11-13 used the official Codex CLI,
+640x480 RGB-D at 15 Hz, the `command_limits` profile, calibrated per-arm
+kinematics and the 0.03 rad entry margin documented above. Both trials placed
+the apple with the left arm and the orange with the right arm into one basket.
+One trial was accepted with confirmed idle stopping. The other was rejected
+as `execution_uncertain`: its final right-arm withdrawal exceeded the existing
+30 mm tracking threshold (30.66 mm), retaining the unknown receipt and
+quarantine. Later stationary feedback did not change that outcome. The cause
+of this tracking deviation remains unresolved; the successful trial is not
+evidence that it has been fixed.
+
+These are limited station observations, not a reliability benchmark or
+validation of the collision profile. Neither trial had an automatic physical
+task evaluator (`task_success` remained null); fruit placement was reviewed
+from the final episode images. Keep station files, credentials, measured
+calibration and run artifacts outside source. A new installation still needs
+its own commissioning and validation.
+The journal-recovery and authorization fixes added during PR review have CPU
+regression coverage only; they were not deployed for those trials.
 See [source attribution](SOURCE.md).

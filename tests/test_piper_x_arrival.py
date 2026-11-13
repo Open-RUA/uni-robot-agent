@@ -1,5 +1,6 @@
 """Arrival semantics use measured feedback, never a retained controller target bit."""
 from collections import deque
+from types import SimpleNamespace
 import threading
 import time
 from unittest.mock import Mock
@@ -7,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from piper_fixtures import timing, deployment
+from uni_robot_agent.integrations.piper_x.environment import control as module
 from uni_robot_agent.integrations.piper_x.hardware.transport import PassiveCan, FeedbackUnavailable
 from uni_robot_agent.integrations.piper_x.hardware.planning import RobotGeometry
 from uni_robot_agent.integrations.piper_x.body.core.arm.arrival import ArrivalWindow
@@ -107,3 +109,77 @@ def test_hold_admission_uses_arx_tolerance_and_holds_fresh_measurement(tmp_path)
     next(iter(targets.values()))["hold_joints"] = [.101] * 6
     with pytest.raises(DeviceError, match="Held joints differ"):
         geometry.plan(measured, targets, segment_m=.03, max_segments=1)
+
+
+@pytest.mark.parametrize("blocker", [None, "quarantine", "hold_error"])
+def test_stop_records_stillness_separately_from_recovery_blockers(tmp_path, monkeypatch, blocker):
+    clock = [10.]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(module.time, "sleep", lambda delay: clock.__setitem__(0, clock[0] + delay))
+    calls = []
+
+    def rpc(method, args, **kwargs):
+        calls.append(method)
+        clock[0] += .001
+        if method == "quiesce_control":
+            return {"control_id": "lease", "device_ids": ["arm"],
+                    "errors": {"arm": "hold rejected"} if blocker == "hold_error" else {}}
+        if method == "describe":
+            return {"devices": [{"device_id": "arm", "control": {"control_id": "lease"},
+                                 "quarantined": blocker == "quarantine"}]}
+        if method == "list_operations":
+            return {"operations": []}
+        if method == "read_state":
+            return {"devices": {"arm": {"freshness": "fresh", "moving": False, "age_s": 0.,
+                "timing": {"source_timestamp_ns": str(int(clock[0] * 1e9))}}}}
+        if method == "get_operation":
+            return {"operation_id": "failed", "state": "unknown", "execution_outcome": "unknown"}
+        assert method == "release_control"
+
+    control = module.Control(Mock(call=rpc), ["arm"],
+        SimpleNamespace(idle_timeout_s=10., stop_timeout_s=.2, rpc_timeout_s=1.), tmp_path / "journal")
+    control.control_id = "lease"
+    try:
+        evidence = control.stop("test")
+        assert evidence["stationary_feedback"]["status"] == "confirmed"
+        assert len(evidence["stationary_feedback"]["samples"]) == 1
+        assert evidence["status"] == ("unknown" if blocker else "confirmed_idle")
+        assert ("release_control" in calls) is (blocker is None)
+        assert control.blocked.is_set()
+        with pytest.raises(module.BodyError):
+            control.stopped_operations(["failed"])
+        assert "invoke" not in calls and "acknowledge" not in calls
+    finally:
+        control.close()
+
+
+@pytest.mark.parametrize("problem", ["moving", "stale", "repeated", "active", "fault", "hold_rpc_lost"])
+def test_uncertain_or_nonconsecutive_feedback_cannot_confirm_stillness(tmp_path, monkeypatch, problem):
+    clock = [10.]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(module.time, "sleep", lambda delay: clock.__setitem__(0, clock[0] + delay))
+
+    def rpc(method, args, **kwargs):
+        clock[0] += .001
+        if method == "quiesce_control":
+            if problem == "hold_rpc_lost":
+                raise module.BodyError("transport_error")
+            return {"control_id": "lease", "device_ids": ["arm"], "errors": {}}
+        if method == "describe":
+            return {"devices": [{"device_id": "arm", "control": {"control_id": "lease"}}]}
+        if method == "list_operations":
+            return {"operations": ["running"] if problem == "active" else []}
+        assert method == "read_state"
+        return {"devices": {"arm": {"freshness": "stale" if problem == "stale" else "fresh",
+            "moving": problem == "moving", "fault": problem == "fault", "age_s": 0.,
+            "timing": {"source_timestamp_ns": "1" if problem == "repeated" else str(int(clock[0] * 1e9))}}}}
+
+    control = module.Control(Mock(call=rpc), ["arm"],
+        SimpleNamespace(idle_timeout_s=10., stop_timeout_s=.2, rpc_timeout_s=1.), tmp_path / "journal")
+    control.control_id = "lease"
+    try:
+        evidence = control.stop("test")
+        assert evidence["status"] == "unknown"
+        assert evidence.get("stationary_feedback", {}).get("status") != "confirmed"
+    finally:
+        control.close()

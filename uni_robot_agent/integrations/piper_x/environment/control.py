@@ -99,7 +99,7 @@ class BodyClient:
 
 TERMINAL = {"succeeded", "failed", "cancelled", "unknown"}
 ACTIVE = ["accepted", "running"]
-STATIONARY_SAMPLES = 2
+STATIONARY_SAMPLES = 3
 
 
 class PreflightBlocked(RuntimeError):
@@ -123,7 +123,8 @@ def _stationary_sample(reading, *, boundary, began):
     age = reading.get("age_s")
     stamp = (reading.get("timing") or {}).get("source_timestamp_ns")
     return (reading.get("freshness") == "fresh" and reading.get("moving") is False
-            and not reading.get("error") and type(age) in (float, int) and math.isfinite(age)
+            and not reading.get("error") and not reading.get("fault")
+            and type(age) in (float, int) and math.isfinite(age)
             and 0 <= age <= .5 and began - age > boundary and str(stamp).isdecimal())
 
 
@@ -406,9 +407,13 @@ class Control:
                     evidence["status"] = "unknown" if self._acquisition_unknown else "not_required"
                     return evidence
                 result = rpc("quiesce_control", {"control_id": self.control_id})
-                if (result.get("control_id") != self.control_id or result.get("errors")
+                if (result.get("control_id") != self.control_id
                         or set(result.get("device_ids", [])) != set(self.ids)):
                     raise BodyError("hold_request_incomplete", details={"quiesce_result": result})
+                # Admission is closed even when the hold request fails. Observe
+                # stillness independently, without certifying an uncertain stop
+                # or clearing the original operation's quarantine.
+                evidence["quiesce_result"] = result
                 boundary = time.monotonic()
                 previous, counts = {}, {d: 0 for d in self.ids}
                 while time.monotonic() < deadline:
@@ -419,8 +424,8 @@ class Control:
                     for d in devices.values():
                         if (d.get("control") or {}).get("control_id") != self.control_id:
                             raise BodyError("stop_ownership_changed")
-                        if d.get("quarantined"):
-                            raise BodyError("stop_quarantined")
+                    quarantined = [name for name, d in devices.items() if d.get("quarantined")]
+                    evidence["quarantined_devices"] = quarantined
                     ops = rpc("list_operations", {"device_ids": self.ids, "states": ACTIVE, "limit": 100})
                     active = bool(ops["operations"]) or any(
                         (d.get("active_stream") or {}).get("state", "closed") != "closed" for d in devices.values())
@@ -433,7 +438,10 @@ class Control:
                                            previous=previous, counts=counts):
                         if self.failure == "control_lost":
                             raise BodyError("control_lost")
-                        evidence.update(status="confirmed_idle", samples=previous)
+                        evidence["stationary_feedback"] = {"status": "confirmed", "samples": previous,
+                            "sample_counts": counts, "physical_stop_guaranteed": False}
+                        if not result.get("errors") and not quarantined:
+                            evidence.update(status="confirmed_idle", samples=previous)
                         break
                     time.sleep(min(.02, max(0., deadline - time.monotonic())))
                 # Lease expiry is not stop evidence.

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Restore Piper-X quarantine from every unknown operation after restart and
+  enforce device-scoped credentials for stop, receipt, lease and stream access.
+
+- Move Piper-X near-bound entry targets 0.03 rad inside native limits and retain
+  strict measured entry verification. Apply the margin to other boundary joints
+  on the recovering arm while retaining unaffected arms. Report stationary
+  feedback separately from failed hold requests and unknown operations; these
+  observations never clear quarantine or replay motion.
+
 - Add the Piper-X physical integration with its native Body runtime, pinned
   installation/calibration configuration and dual-arm whole-path control. It
   reuses the existing Direct tools and replanning executor; an explicit

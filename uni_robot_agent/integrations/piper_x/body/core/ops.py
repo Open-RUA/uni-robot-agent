@@ -228,14 +228,17 @@ class OperationTable:
             op_id = self._by_request.get((principal, request_key))
             return self._ops.get(op_id) if op_id else None
 
-    def list(self, *, device_ids: Iterable[str] | None = None, states: Iterable[str] | None = None, limit: int = 20, cursor: str | None = None) -> tuple[list[Operation], str | None]:
+    def list(self, *, device_ids: Iterable[str] | None = None, allowed_devices: Iterable[str] | None = None,
+             states: Iterable[str] | None = None, limit: int = 20, cursor: str | None = None) -> tuple[list[Operation], str | None]:
         wanted_devices = set(device_ids) if device_ids else None
+        allowed = set(allowed_devices) if allowed_devices is not None else None
         wanted_states = set(states) if states else None
         with self._lock:
             ops = [
                 op
                 for op in self._ops.values()
                 if (wanted_devices is None or wanted_devices.intersection(op.device_ids)) and (wanted_states is None or op.state in wanted_states)
+                and (allowed is None or set(op.device_ids) <= allowed)
             ]
         ops.sort(key=lambda o: o.created_at, reverse=True)
         start = int(cursor) if cursor else 0

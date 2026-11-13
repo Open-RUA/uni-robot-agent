@@ -87,7 +87,7 @@ def test_near_bound_entry_is_monotone_bounded_and_preserves_other_joints(tmp_pat
     arm = next(iter(start))
     start[arm][1] = side * 3.008
     goal = geometry.entry_recovery(start)
-    assert goal[arm][1] == pytest.approx(side * 2.99)
+    assert goal[arm][1] == pytest.approx(side * 2.97)
     assert geometry.check_measured_segment(start, goal)
     with pytest.raises(DeviceError):
         geometry.check(start)
@@ -100,7 +100,28 @@ def test_near_bound_entry_is_monotone_bounded_and_preserves_other_joints(tmp_pat
         geometry.entry_recovery(start)
 
 
-def test_entry_is_an_acknowledged_prefix_and_retains_gripper(tmp_path):
+@pytest.mark.parametrize("side", [-1, 1])
+def test_entry_protects_other_boundary_joints_only_on_the_recovering_arm(tmp_path, side):
+    geometry = RobotGeometry(supervised(tmp_path))
+    start = {n: np.zeros(6) for n in geometry.installation.robot.arms}
+    recovering, idle = list(start)
+    start[recovering][1:4] = [side * 3.008, -side * 3., side * 2.995]
+    start[idle][1:3] = [-3., 3.]
+    goal = geometry.entry_recovery(start)
+    np.testing.assert_allclose(goal[recovering][1:4], [side * 2.97, -side * 2.97, side * 2.97])
+    np.testing.assert_array_equal(goal[idle], start[idle])
+    assert geometry.check_measured_segment(start, goal)
+    # Returning small residuals on multiple boundary joints still enters the range.
+    actual = {name: q.copy() for name, q in goal.items()}
+    actual[recovering][1:4] += [side * .012, -side * .0011, side * .001]
+    geometry.check(actual)
+    # Exact-bound feedback alone never starts a recovery action.
+    start[recovering][1] = side * 3.
+    assert geometry.entry_recovery(start) is None
+
+
+@pytest.mark.parametrize("residual", [0., .012, .032])
+def test_entry_is_an_acknowledged_prefix_and_retains_gripper(tmp_path, residual):
     import threading
     from unittest.mock import Mock
     from piper_fixtures import timing
@@ -129,17 +150,32 @@ def test_entry_is_an_acknowledged_prefix_and_retains_gripper(tmp_path):
 
     body._require_feedback = measured
     body._writers = {n: Mock() for n in state}
+    body._stop_all = Mock(return_value={"status": "unknown"})
     for n, writer in body._writers.items():
-        writer.move.side_effect = lambda q, width, effort, name=n: state.update({name: q.copy()})
+        def move(q, width, effort, name=n):
+            actual = q.copy()
+            if name == arm:
+                # A small residual must leave the measured joint inside its bound.
+                actual[1] -= residual
+            state[name] = actual
+        writer.move.side_effect = move
     params = {"targets": {device: {"hold_joints": state[name].tolist(), "gripper_opening": 0.}
                           for device, name in body._by_device.items()},
               "max_duration_s": 3., "max_segments": 1, "segment_m": .03}
+    if residual > .03:
+        with pytest.raises(DeviceError) as failure:
+            body.invoke(list(body._by_device), "move_eef_group", params,
+                        cancel=threading.Event(), progress=lambda _: None)
+        assert failure.value.execution_outcome == "unknown"
+        body._stop_all.assert_called_once()
+        assert all(writer.move.call_count == 1 for writer in body._writers.values())
+        return
     result = body.invoke(list(body._by_device), "move_eef_group", params,
                          cancel=threading.Event(), progress=lambda _: None)
     assert result["prefix_reason"] == "joint_entry_recovery"
     assert not result["requested_targets_reached"]
     assert result["collision_checked"] is False
-    assert state[arm][1] == pytest.approx(-2.99)
+    assert state[arm][1] == pytest.approx(-2.97 - residual)
     for writer in body._writers.values():
         for call in writer.move.call_args_list:
             assert call.args[1] == pytest.approx(.04)

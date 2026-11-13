@@ -23,7 +23,7 @@ from ..config import FileRef
 # Measured near-bound feedback may enter the native command interval. These
 # never expand transmitted joint limits or permit continued out-of-range goals.
 ENTRY_FEEDBACK_TOLERANCE_RAD = .02
-ENTRY_COMMAND_MARGIN_RAD = .01
+ENTRY_COMMAND_MARGIN_RAD = .03
 
 
 class Capsule(Contract):
@@ -225,9 +225,14 @@ class RobotGeometry:
             lower, upper = np.asarray(calibration.joint_lower), np.asarray(calibration.joint_upper)
             margin = np.minimum(ENTRY_COMMAND_MARGIN_RAD, (upper - lower) / 4)
             below, above = q < lower, q > upper
-            goal[name][below] = (lower + margin)[below]
-            goal[name][above] = (upper - margin)[above]
-            changed |= bool(np.any(below | above))
+            if not np.any(below | above):
+                continue
+            # An exact-bound peer joint can drift outside while this arm enters.
+            # Give its command the same margin without moving an unaffected arm.
+            near_lower, near_upper = q < lower + margin, q > upper - margin
+            goal[name][near_lower] = (lower + margin)[near_lower]
+            goal[name][near_upper] = (upper - margin)[near_upper]
+            changed = True
         if not changed:
             return None
         self.check(goal)

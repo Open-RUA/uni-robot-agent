@@ -106,10 +106,15 @@ class BodyServer:
             for record in self._acknowledgements
         }
         # Operations that were in flight at the last shutdown start quarantined.
-        for op in self.ops.list(states=["unknown"], limit=1000)[0]:
-            for device in op.device_ids:
-                if (device, op.operation_id) not in acknowledged:
-                    self._quarantine.setdefault(device, set()).add(op.operation_id)
+        cursor = None
+        while True:
+            operations, cursor = self.ops.list(states=["unknown"], limit=1000, cursor=cursor)
+            for op in operations:
+                for device in op.device_ids:
+                    if (device, op.operation_id) not in acknowledged:
+                        self._quarantine.setdefault(device, set()).add(op.operation_id)
+            if cursor is None:
+                break
         self._watchdog_thread: threading.Thread | None = None
         if watchdog:
             self._watchdog_thread = threading.Thread(target=self._watchdog_loop, name="body-watchdog", daemon=True)
@@ -205,6 +210,22 @@ class BodyServer:
                 if stream is not None and stream.state != "closed":
                     raise DeviceError(ErrorCode.STREAM_CONFLICT, "a command stream is open on the device", details={"device_id": device_id, "stream_id": stream.stream_id})
 
+    @staticmethod
+    def _authorize_devices(device_ids: Iterable[str], principal: Principal) -> None:
+        for device_id in device_ids:
+            if not principal.allows_device(device_id):
+                raise DeviceError(ErrorCode.FORBIDDEN_DEVICE, "record includes an unauthorized device")
+
+    def _selected_devices(self, args: dict[str, Any], principal: Principal) -> list[str]:
+        if args.get("device_ids") is not None or args.get("device_id") is not None:
+            return self._device_ids(args, principal)
+        return [device_id for device_id in self._devices if principal.allows_device(device_id)]
+
+    def _authorize_control(self, control_id: str, principal: Principal) -> None:
+        lease = self.leases.get(control_id)
+        if lease is not None:
+            self._authorize_devices(lease.device_ids, principal)
+
     def _on_lease_revoked(self, lease: Lease, reason: str) -> None:
         # Cancel active work and close streams that rode on this lease.
         for op in self.ops.active():
@@ -240,6 +261,7 @@ class BodyServer:
             driver_health = self.driver.health()
         except Exception as exc:
             driver_health = {"ok": False, "error": str(exc)}
+        visible = self._t_list_leases({}, principal, trace_id)
         return {
             "ok": bool(driver_health.get("ok", True)),
             "body_id": self._manifest.body_id,
@@ -249,12 +271,14 @@ class BodyServer:
             "backend_epoch": self.backend_epoch,
             "started_at": self.started_at,
             "uptime_s": round(self._clock() - self._started_mono, 3),
-            "devices": list(self._devices),
-            "leases": len(self.leases.active()),
-            "active_operations": len(self.ops.active()),
-            "open_streams": len(self.streams.snapshot()),
-            "quarantined": {k: sorted(v) for k, v in self._quarantine.items() if v},
-            "driver": driver_health,
+            "devices": self._selected_devices({}, principal),
+            "leases": len(visible["leases"]),
+            "active_operations": sum(all(principal.allows_device(d) for d in op.device_ids)
+                                     for op in self.ops.active()),
+            "open_streams": len(visible["streams"]),
+            "quarantined": {k: sorted(v) for k, v in self._quarantine.items() if v and principal.allows_device(k)},
+            # Native diagnostics may include readings for every device.
+            "driver": driver_health if principal.device_ids is None else {"details_omitted": "device_scope"},
             "runtime": dict(getattr(self, "runtime_info", {})),
         }
 
@@ -275,8 +299,14 @@ class BodyServer:
             pass
         data = self._manifest.to_dict()
         wanted = args.get("device_ids")
-        if wanted:
-            data["devices"] = [d for d in data["devices"] if d["device_id"] in set(wanted)]
+        if wanted is None:
+            wanted = self._selected_devices(args, principal)
+        else:
+            # Discovery retains the Body identity even when a requested device
+            # is absent, so callers can diagnose a misbound endpoint.
+            self._authorize_devices(wanted, principal)
+        wanted = set(wanted)
+        data["devices"] = [d for d in data["devices"] if d["device_id"] in wanted]
         for device in data["devices"]:
             device_id = device["device_id"]
             holder = self.leases.holder(device_id)
@@ -359,10 +389,14 @@ class BodyServer:
 
     def _t_get_operation(self, args: dict[str, Any], principal: Principal, trace_id: str) -> dict[str, Any]:
         _require(args, "operation_id")
-        return self.ops.get(str(args["operation_id"])).to_dict()
+        op = self.ops.get(str(args["operation_id"]))
+        self._authorize_devices(op.device_ids, principal)
+        return op.to_dict()
 
     def _t_list_operations(self, args: dict[str, Any], principal: Principal, trace_id: str) -> dict[str, Any]:
-        ops, cursor = self.ops.list(device_ids=args.get("device_ids"), states=args.get("states"), limit=int(args.get("limit", 20)), cursor=args.get("cursor"))
+        devices = self._selected_devices(args, principal)
+        ops, cursor = self.ops.list(device_ids=devices, allowed_devices=principal.device_ids,
+            states=args.get("states"), limit=int(args.get("limit", 20)), cursor=args.get("cursor"))
         return {"operations": [op.to_dict() for op in ops], "next_cursor": cursor}
 
     def _t_lookup_request(self, args: dict[str, Any], principal: Principal, trace_id: str) -> dict[str, Any]:
@@ -373,14 +407,22 @@ class BodyServer:
             for candidate in self.leases.active():
                 if candidate.principal == principal.name and candidate.request_key == args["request_key"]:
                     lease = candidate
+        if op is not None or lease is not None:
+            self._authorize_devices(op.device_ids if op is not None else lease.device_ids, principal)
         return {"found": op is not None or lease is not None, "request_key": args["request_key"], "result": op.to_dict() if op else (lease.to_dict(self._clock()) if lease else {})}
 
     def _t_read_events(self, args: dict[str, Any], principal: Principal, trace_id: str) -> dict[str, Any]:
-        events, cursor = self.events.read(cursor=args.get("cursor"), device_ids=args.get("device_ids"), types=args.get("types"), limit=int(args.get("limit", 50)), wait_s=float(args.get("wait_s", 0)))
+        devices = self._selected_devices(args, principal)
+        events, cursor = self.events.read(cursor=args.get("cursor"), device_ids=devices,
+            allowed_devices=principal.device_ids, types=args.get("types"),
+            limit=int(args.get("limit", 50)), wait_s=float(args.get("wait_s", 0)))
         return {"events": events, "next_cursor": cursor}
 
     def _t_list_leases(self, args: dict[str, Any], principal: Principal, trace_id: str) -> dict[str, Any]:
-        return {"leases": self.leases.snapshot(), "streams": self.streams.snapshot()}
+        return {"leases": {key: value for key, value in self.leases.snapshot().items()
+                           if all(principal.allows_device(d) for d in value["device_ids"])},
+                "streams": {key: value for key, value in self.streams.snapshot().items()
+                            if principal.allows_device(value["device_id"])}}
 
     # -- control -----------------------------------------------------------------------------
 
@@ -393,10 +435,12 @@ class BodyServer:
 
     def _t_renew_control(self, args: dict[str, Any], principal: Principal, trace_id: str) -> dict[str, Any]:
         _require(args, "control_id")
+        self._authorize_control(str(args["control_id"]), principal)
         return self.leases.renew(principal.name, str(args["control_id"])).to_dict(self._clock())
 
     def _t_release_control(self, args: dict[str, Any], principal: Principal, trace_id: str) -> dict[str, Any]:
         _require(args, "control_id")
+        self._authorize_control(str(args["control_id"]), principal)
         lease = self.leases.release(principal.name, str(args["control_id"]))
         return lease.to_dict(self._clock())
 
@@ -410,6 +454,7 @@ class BodyServer:
         errors = {}
         with self._lock:
             lease = self.leases.require(principal.name, control_id)
+            self._authorize_devices(lease.device_ids, principal)
             self._quiesced_controls.add(control_id)
             cancelled = []
             for op in self.ops.active():
@@ -562,6 +607,7 @@ class BodyServer:
     def _t_cancel_operation(self, args: dict[str, Any], principal: Principal, trace_id: str) -> dict[str, Any]:
         _require(args, "operation_id", "control_id")
         op = self.ops.get(str(args["operation_id"]))
+        self._authorize_devices(op.device_ids, principal)
         if op.principal != principal.name and SCOPE_ADMIN not in principal.scopes:
             raise DeviceError(ErrorCode.CONTROL_NOT_OWNED, "operation belongs to another principal", details={"operation_id": op.operation_id})
         self.leases.require(principal.name, str(args["control_id"]), op.device_ids)
@@ -588,9 +634,8 @@ class BodyServer:
 
     def _t_stream_push(self, args: dict[str, Any], principal: Principal, trace_id: str) -> dict[str, Any]:
         _require(args, "stream_id")
-        stream = self.streams._streams.get(str(args["stream_id"]))
-        if stream is None:
-            raise DeviceError(ErrorCode.STREAM_CLOSED, "unknown stream", details={"stream_id": args["stream_id"]})
+        stream = self.streams.get(str(args["stream_id"]))
+        self._authorize_devices([stream.device_id], principal)
         self.leases.require(principal.name, stream.control_id, [stream.device_id])
         self._require_motion_admission(stream.control_id)
         self._guard_write([stream.device_id], allow_stream=True)
@@ -598,6 +643,8 @@ class BodyServer:
 
     def _t_stream_close(self, args: dict[str, Any], principal: Principal, trace_id: str) -> dict[str, Any]:
         _require(args, "stream_id")
+        existing = self.streams.get(str(args["stream_id"]))
+        self._authorize_devices([existing.device_id], principal)
         stream = self.streams.close(stream_id=str(args["stream_id"]), principal=None if SCOPE_ADMIN in principal.scopes else principal.name)
         return stream.to_dict()
 
@@ -637,7 +684,7 @@ class BodyServer:
             Path(name).unlink(missing_ok=True)
 
     def _t_estop(self, args: dict[str, Any], principal: Principal, trace_id: str) -> dict[str, Any]:
-        device_ids = self._device_ids(args, principal) if (args.get("device_ids") or args.get("device_id")) else list(self._devices)
+        device_ids = self._selected_devices(args, principal)
         results: dict[str, Any] = {}
         for device_id in device_ids:
             # Each step is isolated: a journal or stream failure must not keep
