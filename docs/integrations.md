@@ -339,6 +339,45 @@ See [Hybrid extension and migration](hybrid.md), the
 
 ## Integration contract
 
+### RoboUniverse-Verified Direct
+
+Run the bridge inside the Harbor agent container with the official
+`roboenv_client` on `PYTHONPATH` and Uni's `benchmarks` extra installed.
+Pass the public trial instruction file, a fresh output directory, and (for
+dual-arm AgileX Piper packages) the offline arm-base frame table:
+
+```bash
+python -m uni_robot_agent.integrations.robouniverse.server \
+  --instruction-file /path/to/public/instruction.md \
+  --frame-table /path/to/dual_frames.json \
+  --output-dir /tmp/verified-bridge
+```
+
+Connect the planner with `--integration robouniverse --tool-profile direct
+--env-url http://127.0.0.1:18760 --no-sam3`.
+
+- **Instruction stripping & anti-bypass**: Verified appends a raw-client guide
+  under `## Operating this environment` to every task. `server.task_text()`
+  strips that section so the model does not bypass Uni's Direct tools, while
+  the system prompt forbids importing `roboenv`/`roboenv_client` or reading
+  `/opt/roboenv` and preserves the physics-settling reminder. At `finish`, the
+  adapter compares its executed step count against a fresh simulator `observe()`
+  and records `native_steps`, `simulator_steps`, and `bypassed_adapter`.
+- **Fail-closed layout dispatch**: `server.make_adapter()` inspects channel
+  names from `describe()` (never positional assumptions).
+  - *Single-arm Franka Panda (`adapter.py`)*: requires `joint_position_target`
+    with `panda_joint1..7` (rad) plus 1 or 2 metre finger channels sharing one
+    range, solved with limit-aware active-set damped least-squares IK.
+  - *Dual-arm AgileX Piper (`dual_adapter.py`)*: requires 6 radian joints plus
+    1 or 2 metre fingers per `left`/`right` arm (and optional `base_yaw` /
+    `pedestal_yaw` Z-turntable), resolved strictly via SHA-256 `describe_key`
+    lookup in `--frame-table` into a unified `dual_arm_world` frame.
+  - Any unrecognized layout or missing frame-table entry raises
+    `UnsupportedLayout` at startup; no robot geometry is ever guessed.
+- **Scope**: Harbor owns the simulator, step budget, and final verifier score.
+  This integration uses Uni's standard `DIRECT_TOOLS` and makes zero changes to
+  shared gripper or scene tools.
+
 Expose `get_integration_spec()` from an integration module. The
 [`IntegrationSpec` and `IntegrationSession` contracts](../uni_robot_agent/integrations/base.py)
 keep the runtime independent of a simulator or transport:
