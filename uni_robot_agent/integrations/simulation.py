@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 
-def build_simulation_spec(name, *, tool_profiles):
+def build_simulation_spec(name, *, tool_profiles, extra_rules=""):
     from uni_robot_agent.context.prompt import Prompt, register_prompt_builder
     from uni_robot_agent.integrations.gripper import build_gripper_spec, create_session, validate_gripper_cli
 
@@ -23,6 +23,7 @@ def build_simulation_spec(name, *, tool_profiles):
             "files or hidden state. Positions are world metres and internal quaternions "
             "are wxyz at the registered grasp site. Follow each tool's argument schema. "
             "Observe the effects of actions; submitting finish does not determine task success."
+            + extra_rules
         ))
         if episode:
             result = result.append(system="Environment description:\n" + episode.description.environment.model_dump_json(),

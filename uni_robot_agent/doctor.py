@@ -51,6 +51,7 @@ KNOWN_INTEGRATIONS = (
     "robouse",
     "robolab",
     "robotwin",
+    "robouniverse",
     "libero_plus",
     "libero_pro",
 )
